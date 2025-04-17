@@ -1,0 +1,18 @@
+{
+  "envId": "cloud1-2ghmqnl5aabc85cc",
+  "functionRoot": "cloudfunctions",
+  "functions": [
+    {
+      "name": "test",
+      "runtime": "Nodejs12.16"
+    },
+    {
+      "name": "gameRoom",
+      "runtime": "Nodejs12.16"
+    },
+    {
+      "name": "gameBot",
+      "runtime": "Nodejs12.16"
+    }
+  ]
+} 
