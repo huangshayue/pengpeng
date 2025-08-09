@@ -33,5 +33,6 @@
   "cloudfunctionRoot": "cloudfunctions/",
   "miniprogramRoot": "",
   "cloud": true,
-  "cloudbaseEnv": "cloud1-2ghmqnl5aabc85cc"
+  "cloudbaseEnv": "cloud1-2ghmqnl5aabc85cc",
+  "cloudfunctionTemplateRoot": "cloudfunctionTemplate/"
 }

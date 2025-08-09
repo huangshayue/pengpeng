@@ -93,7 +93,43 @@ export default class GameScene {
 
     // 更新游戏状态
     updateGameState(newState) {
-        this.gameState = newState;
+        if (!newState) {
+            console.log('收到空的游戏状态更新');
+            return;
+        }
+
+        console.log('更新游戏状态:', newState);
+
+        // 确保 gameState 已初始化
+        if (!this.gameState) {
+            this.gameState = new GameState();
+        }
+
+        // 更新玩家1状态
+        if (newState.player1) {
+            this.gameState.player1 = {
+                health: newState.player1.health || 100,
+                qi: newState.player1.qi || 0,
+                isDefending: newState.player1.isDefending || false,
+                defenseType: newState.player1.defenseType || null
+            };
+        }
+
+        // 更新玩家2状态
+        if (newState.player2) {
+            this.gameState.player2 = {
+                health: newState.player2.health || 100,
+                qi: newState.player2.qi || 0,
+                isDefending: newState.player2.isDefending || false,
+                defenseType: newState.player2.defenseType || null
+            };
+        }
+
+        // 检查游戏是否结束
+        const winner = this.gameState.checkGameOver();
+        if (winner > 0) {
+            this.endGame(winner);
+        }
     }
 
     // 创建游戏按钮
@@ -248,6 +284,15 @@ export default class GameScene {
 
     // 渲染UI（玩家状态）
     renderUI() {
+        if (!this.gameState || !this.gameState.player1 || !this.gameState.player2) {
+            // 如果游戏状态未初始化，显示等待信息
+            this.ctx.fillStyle = '#333';
+            this.ctx.font = '24px Arial';
+            this.ctx.textAlign = 'center';
+            this.ctx.fillText('等待游戏开始...', this.width / 2, this.height / 2);
+            return;
+        }
+
         // 根据玩家编号决定显示位置
         if (this.playerNumber === 1) {
             this.renderPlayerStatus(1, this.gameState.player1, 50);
@@ -260,6 +305,11 @@ export default class GameScene {
 
     // 渲染玩家状态
     renderPlayerStatus(playerNumber, player, y) {
+        if (!player) {
+            console.log('Player data not available:', playerNumber);
+            return;
+        }
+
         this.ctx.fillStyle = '#333';
         this.ctx.font = '20px Arial';
         this.ctx.textAlign = 'left';
@@ -270,18 +320,24 @@ export default class GameScene {
         // 玩家标题
         this.ctx.fillText(`${playerText}`, 20, y);
         
+        // 初始化默认值
+        const health = player.health || 100;
+        const qi = player.qi || 0;
+        const isDefending = player.isDefending || false;
+        const defenseType = player.defenseType || '无';
+        
         // 生命值
         this.ctx.fillStyle = '#FF0000';
-        this.ctx.fillText(`生命: ${player.health}`, 20, y + 30);
+        this.ctx.fillText(`生命: ${health}`, 20, y + 30);
         
         // 气值
         this.ctx.fillStyle = '#0000FF';
-        this.ctx.fillText(`气: ${player.qi}`, 20, y + 60);
+        this.ctx.fillText(`气: ${qi}`, 20, y + 60);
         
         // 防御状态
         this.ctx.fillStyle = '#008000';
         this.ctx.fillText(
-            `防御: ${player.isDefending ? player.defenseType : '无'}`,
+            `防御: ${isDefending ? defenseType : '无'}`,
             20, y + 90
         );
     }

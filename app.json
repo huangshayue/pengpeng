@@ -1,0 +1,20 @@
+{
+  "pages": [
+    "pages/index/index",
+    "pages/score/score"
+  ],
+  "window": {
+    "backgroundTextStyle": "light",
+    "navigationBarBackgroundColor": "#fff",
+    "navigationBarTitleText": "乐谱管理",
+    "navigationBarTextStyle": "black"
+  },
+  "permission": {
+    "scope.writePhotosAlbum": {
+      "desc": "用于保存乐谱文件"
+    }
+  },
+  "requiredPrivateInfos": [
+    "writePhotosAlbum"
+  ]
+} 
