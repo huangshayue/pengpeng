@@ -19,11 +19,18 @@ export default class OneHitBattleScene {
         
         // 游戏状态
         this.isGameStarted = false;
+        this.gameMode = null; // 'pve' (人机) 或 'pvp' (人人)
         
         // 回合制系统
         this.currentTurn = 'player'; // 'player' 或 'ai'
         this.isProcessing = false; // 是否正在处理动作
         this.roundNumber = 1; // 回合数
+        
+        // PVP模式状态
+        this.player1Action = null; // 玩家1选择的动作
+        this.player2Action = null; // 玩家2选择的动作
+        this.currentPlayer = 1; // 当前操作的玩家 (1 或 2)
+        this.actionConfirmed = false; // 是否确认了动作
         
         // AI动作显示
         this.currentActionDisplay = null;
@@ -44,9 +51,39 @@ export default class OneHitBattleScene {
 
     init() {
         console.log('初始化一击必杀对战场景');
-        this.showStartButton();
+        this.showModeSelection();
     }
 
+    showModeSelection() {
+        const buttonWidth = 240;
+        const buttonHeight = 70;
+        const spacing = 20;
+        const totalHeight = buttonHeight * 2 + spacing;
+        const startY = (this.height - totalHeight) / 2;
+        
+        // 人机对战按钮
+        this.pveButton = {
+            x: (this.width - buttonWidth) / 2,
+            y: startY,
+            width: buttonWidth,
+            height: buttonHeight,
+            text: '🤖 人机对战',
+            scale: 1,
+            mode: 'pve'
+        };
+        
+        // 人人对战按钮
+        this.pvpButton = {
+            x: (this.width - buttonWidth) / 2,
+            y: startY + buttonHeight + spacing,
+            width: buttonWidth,
+            height: buttonHeight,
+            text: '👥 人人对战',
+            scale: 1,
+            mode: 'pvp'
+        };
+    }
+    
     showStartButton() {
         const buttonWidth = 240;
         const buttonHeight = 70;
@@ -63,15 +100,26 @@ export default class OneHitBattleScene {
         };
     }
 
-    startGame() {
+    startGame(mode) {
         this.isGameStarted = true;
+        this.gameMode = mode;
         this.startButton = null;
+        this.pveButton = null;
+        this.pvpButton = null;
         this.gameState.reset();
         
         // 重置状态
         this.currentTurn = 'player';
         this.isProcessing = false;
         this.roundNumber = 1;
+        
+        // PVP模式初始化
+        if (mode === 'pvp') {
+            this.player1Action = null;
+            this.player2Action = null;
+            this.currentPlayer = 1;
+            this.actionConfirmed = false;
+        }
         
         // 创建角色精灵
         this.playerSprite = new CharacterSprite(this.width / 2, this.height - 150, true);
@@ -194,6 +242,25 @@ export default class OneHitBattleScene {
 
     // 处理玩家触摸
     handleTouch(x, y) {
+        // 处理模式选择
+        if (!this.gameMode && !this.isGameStarted) {
+            if (this.pveButton && this.checkModeButton(x, y, this.pveButton)) {
+                this.pveButton.scale = 0.9;
+                setTimeout(() => {
+                    this.startGame('pve');
+                }, 100);
+                return;
+            }
+            if (this.pvpButton && this.checkModeButton(x, y, this.pvpButton)) {
+                this.pvpButton.scale = 0.9;
+                setTimeout(() => {
+                    this.startGame('pvp');
+                }, 100);
+                return;
+            }
+            return;
+        }
+        
         const action = this.checkButtonClick(x, y);
         if (!action) return;
 
@@ -201,7 +268,7 @@ export default class OneHitBattleScene {
             this.startButton.scale = 0.9;
             setTimeout(() => {
                 this.startButton && (this.startButton.scale = 1);
-                this.startGame();
+                this.startGame(this.gameMode);
             }, 100);
             return;
         }
@@ -214,6 +281,13 @@ export default class OneHitBattleScene {
             return;
         }
 
+        // PVP模式处理
+        if (this.gameMode === 'pvp') {
+            this.handlePVPTouch(action);
+            return;
+        }
+        
+        // PVE模式处理
         if (!this.gameState.player1.isAlive) {
             wx.showToast({
                 title: '你已失败',
@@ -268,6 +342,173 @@ export default class OneHitBattleScene {
         this.executePlayerAction(action);
     }
 
+    // PVP模式触摸处理
+    handlePVPTouch(action) {
+        // 处理确认按钮
+        if (action === 'confirm') {
+            this.confirmPVPAction();
+            return;
+        }
+        
+        // 处理切换玩家按钮
+        if (action === 'switch') {
+            this.switchPlayer();
+            return;
+        }
+        
+        // 检查当前玩家是否已经选择了动作
+        if (this.currentPlayer === 1 && this.player1Action) {
+            wx.showToast({
+                title: '请先确认或切换玩家',
+                icon: 'none'
+            });
+            return;
+        }
+        
+        if (this.currentPlayer === 2 && this.player2Action) {
+            wx.showToast({
+                title: '请先确认或切换玩家',
+                icon: 'none'
+            });
+            return;
+        }
+        
+        // 检查是否可以使用该动作
+        if (!this.canUseAction(action, this.currentPlayer)) {
+            const player = this.currentPlayer === 1 ? this.gameState.player1 : this.gameState.player2;
+            if (player.defenseBroken && 
+                (action === ActionType.NORMAL_DEFENSE || action === ActionType.BLOOD_DEFENSE)) {
+                wx.showToast({
+                    title: '防御已破损',
+                    icon: 'none'
+                });
+            } else {
+                wx.showToast({
+                    title: '气不足',
+                    icon: 'none'
+                });
+            }
+            return;
+        }
+        
+        // 设置当前玩家的动作（但不执行）
+        if (this.currentPlayer === 1) {
+            this.player1Action = action;
+        } else {
+            this.player2Action = action;
+        }
+        
+        // 按钮动画
+        const button = Object.values(this.buttons).find(b => b.action === action);
+        if (button) {
+            button.scale = 0.8;
+            setTimeout(() => button.scale = 1, 150);
+        }
+        
+        wx.showToast({
+            title: `玩家${this.currentPlayer}已选择`,
+            icon: 'none',
+            duration: 1000
+        });
+    }
+    
+    // 确认PVP动作
+    confirmPVPAction() {
+        if (this.currentPlayer === 1) {
+            if (!this.player1Action) {
+                wx.showToast({
+                    title: '请先选择动作',
+                    icon: 'none'
+                });
+                return;
+            }
+            // 切换到玩家2
+            this.currentPlayer = 2;
+            wx.showToast({
+                title: '玩家2请选择',
+                icon: 'none'
+            });
+        } else {
+            if (!this.player2Action) {
+                wx.showToast({
+                    title: '请先选择动作',
+                    icon: 'none'
+                });
+                return;
+            }
+            // 两个玩家都选择完毕，执行动作
+            this.executePVPRound();
+        }
+    }
+    
+    // 切换玩家
+    switchPlayer() {
+        if (this.currentPlayer === 1 && !this.player1Action) {
+            wx.showToast({
+                title: '玩家1未选择动作',
+                icon: 'none'
+            });
+            return;
+        }
+        if (this.currentPlayer === 2 && !this.player2Action) {
+            wx.showToast({
+                title: '玩家2未选择动作',
+                icon: 'none'
+            });
+            return;
+        }
+        
+        this.currentPlayer = this.currentPlayer === 1 ? 2 : 1;
+        wx.showToast({
+            title: `切换到玩家${this.currentPlayer}`,
+            icon: 'none'
+        });
+    }
+    
+    // 执行PVP回合
+    executePVPRound() {
+        this.isProcessing = true;
+        
+        // 显示双方动作
+        this.showActionDisplay('玩家1', this.player1Action);
+        setTimeout(() => {
+            this.showActionDisplay('玩家2', this.player2Action);
+        }, 500);
+        
+        // 延迟后同时执行动作
+        setTimeout(() => {
+            // 执行玩家1的动作
+            const success1 = this.gameState.handleAction(1, this.player1Action);
+            if (success1) {
+                this.handleActionEffects(1, this.player1Action);
+            }
+            
+            // 执行玩家2的动作
+            const success2 = this.gameState.handleAction(2, this.player2Action);
+            if (success2) {
+                this.handleActionEffects(2, this.player2Action);
+            }
+            
+            // 检查游戏结束
+            const winner = this.gameState.checkGameOver();
+            if (winner > 0) {
+                this.endGame(winner);
+            } else {
+                // 重置动作选择
+                this.player1Action = null;
+                this.player2Action = null;
+                this.currentPlayer = 1;
+                this.isProcessing = false;
+                this.roundNumber++;
+                
+                wx.showToast({
+                    title: '新回合开始',
+                    icon: 'none'
+                });
+            }
+        }, 2000);
+    }
+    
     // 执行玩家动作
     executePlayerAction(action) {
         this.isProcessing = true;
@@ -350,7 +591,10 @@ export default class OneHitBattleScene {
         
         this.renderBackground();
         
-        if (!this.isGameStarted && this.startButton) {
+        // 渲染模式选择
+        if (!this.gameMode && !this.isGameStarted) {
+            this.renderModeSelection();
+        } else if (!this.isGameStarted && this.startButton) {
             this.renderStartButton();
         } else if (this.isGameStarted) {
             // 先渲染角色
@@ -363,7 +607,14 @@ export default class OneHitBattleScene {
             
             this.renderGameUI();
             this.renderButtons();
-            this.renderBattleStatus();
+            
+            if (this.gameMode === 'pvp') {
+                this.renderPVPStatus();
+                this.renderPVPControls();
+            } else {
+                this.renderBattleStatus();
+            }
+            
             this.renderActionDisplay();
         }
         
@@ -537,10 +788,19 @@ export default class OneHitBattleScene {
         this.isGameStarted = false;
         
         // 设置游戏结束状态
+        let message, subMessage;
+        if (this.gameMode === 'pvp') {
+            message = winner === 1 ? '玩家1胜利！' : '玩家2胜利！';
+            subMessage = winner === 1 ? '玩家1击败了玩家2！' : '玩家2击败了玩家1！';
+        } else {
+            message = winner === 1 ? '胜利！' : '失败！';
+            subMessage = winner === 1 ? '你击败了AI！' : 'AI击败了你！';
+        }
+        
         this.gameOverInfo = {
             winner: winner,
-            message: winner === 1 ? '胜利！' : '失败！',
-            subMessage: winner === 1 ? '你击败了AI！' : 'AI击败了你！',
+            message: message,
+            subMessage: subMessage,
             displayTime: 5000 // 显示5秒
         };
         
@@ -615,6 +875,31 @@ export default class OneHitBattleScene {
         const buttonHeight = 55;
         const buttonY = this.height - 200;
         const spacing = 15;
+        
+        // PVP模式下创建确认和切换按钮
+        if (this.gameMode === 'pvp') {
+            const controlButtonWidth = (this.width - 30) / 2;
+            const controlButtonHeight = 50;
+            const controlButtonY = this.height - 60;
+            
+            this.confirmButton = {
+                x: 10,
+                y: controlButtonY,
+                width: controlButtonWidth,
+                height: controlButtonHeight,
+                text: '✅ 确认选择',
+                color: '#4CAF50'
+            };
+            
+            this.switchButton = {
+                x: controlButtonWidth + 20,
+                y: controlButtonY,
+                width: controlButtonWidth,
+                height: controlButtonHeight,
+                text: '🔄 切换玩家',
+                color: '#2196F3'
+            };
+        }
 
         return {
             accumulate: {
@@ -692,6 +977,11 @@ export default class OneHitBattleScene {
         };
     }
 
+    checkModeButton(x, y, button) {
+        return x >= button.x && x < button.x + button.width &&
+               y >= button.y && y < button.y + button.height;
+    }
+    
     checkButtonClick(x, y) {
         if (!this.isGameStarted && this.startButton) {
             if (x >= this.startButton.x && x < this.startButton.x + this.startButton.width &&
@@ -699,6 +989,20 @@ export default class OneHitBattleScene {
                 return 'start';
             }
             return null;
+        }
+        
+        // PVP模式的确认和切换按钮
+        if (this.gameMode === 'pvp' && this.isGameStarted) {
+            if (this.confirmButton && 
+                x >= this.confirmButton.x && x < this.confirmButton.x + this.confirmButton.width &&
+                y >= this.confirmButton.y && y < this.confirmButton.y + this.confirmButton.height) {
+                return 'confirm';
+            }
+            if (this.switchButton && 
+                x >= this.switchButton.x && x < this.switchButton.x + this.switchButton.width &&
+                y >= this.switchButton.y && y < this.switchButton.y + this.switchButton.height) {
+                return 'switch';
+            }
         }
 
         for (const [key, button] of Object.entries(this.buttons)) {
@@ -736,6 +1040,143 @@ export default class OneHitBattleScene {
         this.ctx.fillRect(0, 0, this.width, this.height);
     }
 
+    renderModeSelection() {
+        // 标题
+        this.ctx.save();
+        this.ctx.fillStyle = '#FFFFFF';
+        this.ctx.font = 'bold 36px Arial';
+        this.ctx.textAlign = 'center';
+        this.ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+        this.ctx.shadowBlur = 10;
+        this.ctx.fillText('选择游戏模式', this.width / 2, 100);
+        this.ctx.restore();
+        
+        // 渲染模式按钮
+        this.renderModeButton(this.pveButton);
+        this.renderModeButton(this.pvpButton);
+    }
+    
+    renderModeButton(button) {
+        if (!button) return;
+        
+        this.ctx.save();
+        this.ctx.translate(button.x + button.width / 2, button.y + button.height / 2);
+        this.ctx.scale(button.scale, button.scale);
+        
+        const gradient = this.ctx.createLinearGradient(-button.width / 2, 0, button.width / 2, 0);
+        if (button.mode === 'pve') {
+            gradient.addColorStop(0, '#4CAF50');
+            gradient.addColorStop(1, '#388E3C');
+        } else {
+            gradient.addColorStop(0, '#2196F3');
+            gradient.addColorStop(1, '#1976D2');
+        }
+        
+        this.ctx.fillStyle = gradient;
+        this.ctx.shadowColor = button.mode === 'pve' ? 'rgba(76, 175, 80, 0.5)' : 'rgba(33, 150, 243, 0.5)';
+        this.ctx.shadowBlur = 20;
+        this.roundRect(-button.width / 2, -button.height / 2, button.width, button.height, 15);
+        this.ctx.fill();
+        
+        this.ctx.strokeStyle = button.mode === 'pve' ? '#2E7D32' : '#1565C0';
+        this.ctx.lineWidth = 3;
+        this.ctx.stroke();
+        
+        this.ctx.fillStyle = '#FFFFFF';
+        this.ctx.font = 'bold 24px Arial';
+        this.ctx.textAlign = 'center';
+        this.ctx.textBaseline = 'middle';
+        this.ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
+        this.ctx.shadowBlur = 4;
+        this.ctx.fillText(button.text, 0, 0);
+        
+        this.ctx.restore();
+    }
+    
+    renderPVPStatus() {
+        this.ctx.save();
+        this.ctx.fillStyle = '#FFFFFF';
+        this.ctx.font = 'bold 20px Arial';
+        this.ctx.textAlign = 'center';
+        this.ctx.shadowColor = '#000000';
+        this.ctx.shadowBlur = 3;
+        
+        // 显示回合数
+        this.ctx.fillStyle = '#2196F3';
+        this.ctx.fillText(`回合 ${this.roundNumber}`, this.width / 2, this.height / 2 - 40);
+        
+        // 显示当前操作玩家
+        let statusText = '';
+        let statusColor = '#4CAF50';
+        
+        if (this.currentPlayer === 1) {
+            statusText = this.player1Action ? '玩家1已选择' : '玩家1选择中...';
+            statusColor = this.player1Action ? '#FFC107' : '#4CAF50';
+        } else {
+            statusText = this.player2Action ? '玩家2已选择' : '玩家2选择中...';
+            statusColor = this.player2Action ? '#FFC107' : '#FF5722';
+        }
+        
+        this.ctx.fillStyle = statusColor;
+        this.ctx.font = 'bold 24px Arial';
+        this.ctx.fillText(statusText, this.width / 2, this.height / 2);
+        
+        // 显示选择状态
+        if (this.player1Action || this.player2Action) {
+            this.ctx.font = '16px Arial';
+            this.ctx.fillStyle = '#FFD700';
+            let actionStatus = [];
+            if (this.player1Action) actionStatus.push('P1✓');
+            if (this.player2Action) actionStatus.push('P2✓');
+            this.ctx.fillText(actionStatus.join(' '), this.width / 2, this.height / 2 + 25);
+        }
+        
+        // 显示对战模式标志
+        this.ctx.fillStyle = '#FF5722';
+        this.ctx.font = '16px Arial';
+        this.ctx.fillText('👥 人人对战', this.width / 2, this.height / 2 + 50);
+        
+        this.ctx.restore();
+    }
+    
+    renderPVPControls() {
+        // 渲染确认按钮
+        if (this.confirmButton) {
+            this.renderControlButton(this.confirmButton);
+        }
+        
+        // 渲染切换按钮
+        if (this.switchButton) {
+            this.renderControlButton(this.switchButton);
+        }
+    }
+    
+    renderControlButton(button) {
+        this.ctx.save();
+        
+        const gradient = this.ctx.createLinearGradient(button.x, button.y, button.x + button.width, button.y);
+        gradient.addColorStop(0, button.color);
+        gradient.addColorStop(1, this.adjustColor(button.color, -20));
+        
+        this.ctx.fillStyle = gradient;
+        this.ctx.shadowColor = button.color;
+        this.ctx.shadowBlur = 10;
+        this.roundRect(button.x, button.y, button.width, button.height, 10);
+        this.ctx.fill();
+        
+        this.ctx.strokeStyle = this.adjustColor(button.color, -30);
+        this.ctx.lineWidth = 2;
+        this.ctx.stroke();
+        
+        this.ctx.fillStyle = '#FFFFFF';
+        this.ctx.font = 'bold 18px Arial';
+        this.ctx.textAlign = 'center';
+        this.ctx.textBaseline = 'middle';
+        this.ctx.fillText(button.text, button.x + button.width / 2, button.y + button.height / 2);
+        
+        this.ctx.restore();
+    }
+    
     renderStartButton() {
         const button = this.startButton;
         const scale = button.scale;
@@ -770,10 +1211,17 @@ export default class OneHitBattleScene {
     }
 
     renderGameUI() {
-        // AI状态（上方）
-        this.renderPlayerCard('AI', 2, 40, false);
-        // 玩家状态（下方）
-        this.renderPlayerCard('你', 1, this.height - 280, true);
+        if (this.gameMode === 'pvp') {
+            // PVP模式：玩家2状态（上方）
+            this.renderPlayerCard('玩家2', 2, 40, false);
+            // 玩家1状态（下方）
+            this.renderPlayerCard('玩家1', 1, this.height - 280, true);
+        } else {
+            // PVE模式：AI状态（上方）
+            this.renderPlayerCard('AI', 2, 40, false);
+            // 玩家状态（下方）
+            this.renderPlayerCard('你', 1, this.height - 280, true);
+        }
     }
 
     renderPlayerCard(name, playerNumber, y, isPlayer) {
