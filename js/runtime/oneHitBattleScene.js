@@ -68,6 +68,47 @@ export default class OneHitBattleScene {
         this.showModeSelection();
     }
 
+    // 重置到模式选择界面
+    resetToModeSelection() {
+        // 清理游戏状态
+        this.isGameStarted = false;
+        this.gameMode = null;
+        this.gameOverInfo = null;
+        this.startButton = null;
+        this.shareButton = null;
+        this.isWaitingForOpponent = false;
+        this.showingRoomInput = false;
+        this.roomInputText = '';
+        
+        // 清理在线状态
+        if (this.onlineManager) {
+            this.onlineManager.disconnect();
+            this.onlineManager = null;
+        }
+        this.roomId = null;
+        
+        // 重置回合状态
+        this.currentTurn = 'player';
+        this.isProcessing = false;
+        this.roundNumber = 1;
+        
+        // 重置PVP状态
+        this.player1Action = null;
+        this.player2Action = null;
+        this.currentPlayer = 1;
+        this.actionConfirmed = false;
+        
+        // 重置游戏状态
+        this.gameState.reset();
+        
+        // 清理精灵
+        this.playerSprite = null;
+        this.aiSprite = null;
+        
+        // 重新显示模式选择
+        this.showModeSelection();
+    }
+    
     showModeSelection() {
         const buttonWidth = 240;
         const buttonHeight = 70;
@@ -1244,20 +1285,57 @@ export default class OneHitBattleScene {
         
         // 延迟显示模态框
         setTimeout(() => {
-            wx.showModal({
-                title: winner === 1 ? '🎉 游戏胜利' : '💀 游戏失败',
-                content: winner === 1 ? 
+            // 根据游戏模式调整文本
+            let modalTitle, modalContent;
+            if (this.gameMode === 'pvp') {
+                modalTitle = winner === 1 ? '🎉 玩家1胜利' : '🎉 玩家2胜利';
+                modalContent = winner === 1 ? 
+                    '玩家1成功击败了玩家2！\n是否再来一局？' : 
+                    '玩家2成功击败了玩家1！\n是否再来一局？';
+            } else if (this.gameMode === 'online') {
+                modalTitle = winner === 1 ? '🎉 游戏胜利' : '💀 游戏失败';
+                modalContent = winner === 1 ? 
+                    '恭喜你！你成功击败了对手！\n是否再来一局？' : 
+                    '很遗憾，你被对手击败了。\n是否重新挑战？';
+            } else {
+                modalTitle = winner === 1 ? '🎉 游戏胜利' : '💀 游戏失败';
+                modalContent = winner === 1 ? 
                     '恭喜你！你成功击败了AI！\n是否再来一局？' : 
-                    '很遗憾，你被AI击败了。\n是否重新挑战？',
+                    '很遗憾，你被AI击败了。\n是否重新挑战？';
+            }
+            
+            wx.showModal({
+                title: modalTitle,
+                content: modalContent,
                 confirmText: '再来一局',
-                cancelText: '查看战场',
+                cancelText: '返回主页',
                 success: (res) => {
+                    // 先清除游戏结束信息
+                    this.gameOverInfo = null;
+                    
                     if (res.confirm) {
-                        this.startGame();
+                        // 保存当前游戏模式
+                        const currentMode = this.gameMode;
+                        
+                        // 如果是在线模式，断开连接
+                        if (this.gameMode === 'online' && this.onlineManager) {
+                            this.onlineManager.disconnect();
+                            this.onlineManager = null;
+                            this.isWaitingForOpponent = false;
+                            this.roomId = null;
+                        }
+                        
+                        // 重新开始同模式游戏
+                        if (currentMode === 'online') {
+                            // 在线模式回到模式选择界面
+                            this.resetToModeSelection();
+                        } else {
+                            // 其他模式直接重新开始
+                            this.startGame(currentMode);
+                        }
                     } else {
-                        // 显示开始按钮，让玩家可以查看战场
-                        this.showStartButton();
-                        this.gameOverInfo = null; // 清除游戏结束信息
+                        // 返回主页面
+                        this.resetToModeSelection();
                     }
                 }
             });
