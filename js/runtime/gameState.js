@@ -99,8 +99,8 @@ export default class GameState {
         }
 
         attacker.qi -= 1;
-        const damage = this.calculateDamage(1, defender);
-        defender.health -= damage;
+        const damage = this.calculateDamage(10, defender);
+        defender.health = Math.max(0, defender.health - damage);
         
         console.log('一指攻击造成伤害:', damage);
         return true;
@@ -114,8 +114,8 @@ export default class GameState {
         }
 
         attacker.qi -= 5;
-        const damage = this.calculateDamage(5, defender);
-        defender.health -= damage;
+        const damage = this.calculateDamage(50, defender);
+        defender.health = Math.max(0, defender.health - damage);
         
         console.log('发波攻击造成伤害:', damage);
         return true;
@@ -137,8 +137,8 @@ export default class GameState {
             console.log('磨磨破除了血挡');
         }
         
-        const damage = this.calculateDamage(2, defender);
-        defender.health -= damage;
+        const damage = this.calculateDamage(20, defender);
+        defender.health = Math.max(0, defender.health - damage);
         
         console.log('磨磨攻击造成伤害:', damage);
         return true;
@@ -152,8 +152,12 @@ export default class GameState {
 
         switch (defender.defenseType) {
             case 'normal':
-                return Math.max(0, baseDamage - 3);
+                // 普挡减少50%伤害
+                return Math.floor(baseDamage * 0.5);
             case 'blood':
+                // 血挡完全防御，但扣除5点生命值作为代价
+                defender.health = Math.max(0, defender.health - 5);
+                console.log('血挡消耗5点生命值');
                 return 0;
             default:
                 return baseDamage;

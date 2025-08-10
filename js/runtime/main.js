@@ -1,4 +1,4 @@
-import GameScene from './gameScene.js';
+import SimpleGameScene from './simpleGameScene.js';
 
 // 游戏主类
 export default class Main {
@@ -60,7 +60,7 @@ export default class Main {
     initGameScene() {
         console.log('开始初始化游戏场景');
         try {
-            this.gameScene = new GameScene(
+            this.gameScene = new SimpleGameScene(
                 this.ctx,
                 this.canvasWidth,
                 this.canvasHeight
