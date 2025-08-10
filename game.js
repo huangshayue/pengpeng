@@ -2,6 +2,17 @@ import Main from './js/runtime/main.js';
 
 console.log('游戏开始初始化');
 
+// 初始化云开发
+if (wx.cloud) {
+  wx.cloud.init({
+    env: 'cloud1-2ghmqnl5aabc85cc', // 你的云环境ID
+    traceUser: true
+  });
+  console.log('云开发初始化成功');
+} else {
+  console.log('云开发不可用，将使用本地模式');
+}
+
 try {
     // 创建游戏实例
     const main = new Main();
