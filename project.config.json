@@ -25,16 +25,32 @@
   "packOptions": {
     "ignore": [
       {
-        "type": "file",
-        "value": "pages/"
+        "type": "folder",
+        "value": "pages"
       },
       {
-        "type": "file", 
-        "value": ".git/"
+        "type": "folder", 
+        "value": ".git"
+      },
+      {
+        "type": "folder",
+        "value": "node_modules"
       },
       {
         "type": "file",
-        "value": "node_modules/"
+        "value": "*.wxml"
+      },
+      {
+        "type": "file",
+        "value": "*.wxss"
+      },
+      {
+        "type": "regexp",
+        "value": "\\.wxml$"
+      },
+      {
+        "type": "regexp",
+        "value": "\\.wxss$"
       }
     ],
     "include": []
