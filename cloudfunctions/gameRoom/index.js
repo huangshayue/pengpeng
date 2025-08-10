@@ -49,6 +49,7 @@ exports.main = async (event, context) => {
 
 // 创建房间
 async function createRoom(roomId, playerId, openId) {
+  console.log('创建房间请求:', { roomId, playerId, openId })
   const rooms = db.collection('pengpeng_rooms')
   
   // 检查房间是否已存在
@@ -56,8 +57,11 @@ async function createRoom(roomId, playerId, openId) {
     roomId: roomId
   }).get()
   
+  console.log('查找已存在房间结果:', existingRoom.data.length)
+  
   if (existingRoom.data.length > 0) {
     // 如果房间已存在，更新房间信息
+    console.log('更新已存在房间:', existingRoom.data[0]._id)
     await rooms.doc(existingRoom.data[0]._id).update({
       data: {
         host: {
@@ -65,13 +69,15 @@ async function createRoom(roomId, playerId, openId) {
           openId: openId,
           joinTime: new Date()
         },
+        guest: null,  // 清空访客，重新等待
         status: 'waiting',
         updateTime: new Date()
       }
     })
   } else {
     // 创建新房间
-    await rooms.add({
+    console.log('创建新房间')
+    const result = await rooms.add({
       data: {
         roomId: roomId,
         host: {
@@ -86,6 +92,7 @@ async function createRoom(roomId, playerId, openId) {
         updateTime: new Date()
       }
     })
+    console.log('房间创建成功:', result._id)
   }
   
   return {
@@ -96,22 +103,48 @@ async function createRoom(roomId, playerId, openId) {
 
 // 加入房间
 async function joinRoom(roomId, playerId, openId) {
+  console.log('尝试加入房间:', { roomId, playerId, openId })
   const rooms = db.collection('pengpeng_rooms')
   
-  // 查找房间
-  const room = await rooms.where({
-    roomId: roomId,
-    status: 'waiting'
+  // 先查找所有匹配的房间（不限制状态）
+  const allRooms = await rooms.where({
+    roomId: roomId
   }).get()
   
-  if (room.data.length === 0) {
+  console.log('找到的房间数量:', allRooms.data.length)
+  
+  if (allRooms.data.length === 0) {
     return {
       success: false,
-      error: '房间不存在或已开始游戏'
+      error: '房间不存在'
     }
   }
   
-  const roomData = room.data[0]
+  // 查找waiting状态的房间
+  const waitingRooms = allRooms.data.filter(r => r.status === 'waiting')
+  console.log('等待中的房间数量:', waitingRooms.length)
+  
+  if (waitingRooms.length === 0) {
+    const room = allRooms.data[0]
+    if (room.status === 'playing') {
+      return {
+        success: false,
+        error: '房间正在游戏中'
+      }
+    } else if (room.status === 'ended') {
+      return {
+        success: false,
+        error: '房间已结束'
+      }
+    } else {
+      return {
+        success: false,
+        error: '房间状态异常: ' + room.status
+      }
+    }
+  }
+  
+  const roomData = waitingRooms[0]
   
   // 检查是否是房主重新加入
   if (roomData.host && roomData.host.openId === openId) {
@@ -129,7 +162,7 @@ async function joinRoom(roomId, playerId, openId) {
         openId: openId,
         joinTime: new Date()
       },
-      status: 'playing',
+      status: 'waiting',  // 保持waiting状态，直到游戏真正开始
       updateTime: new Date(),
       // 添加玩家加入消息
       messages: _.push({

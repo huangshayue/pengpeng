@@ -1045,8 +1045,9 @@ export default class OneHitBattleScene {
                 this.startGame('online');
             } else {
                 console.log('加入房间失败:', roomId);
+                // 这个else分支实际上不会执行，因为onlineManager会抛出异常
                 wx.showToast({
-                    title: '房间不存在或已满',
+                    title: '加入房间失败',
                     icon: 'none',
                     duration: 2000
                 });
@@ -1057,10 +1058,11 @@ export default class OneHitBattleScene {
             }
         } catch (error) {
             console.error('加入房间出错:', error);
+            const errorMsg = error.message || '网络错误，请重试';
             wx.showToast({
-                title: '网络错误，请重试',
+                title: errorMsg,
                 icon: 'none',
-                duration: 2000
+                duration: 2500
             });
             // 出错，返回模式选择
             this.gameMode = null;

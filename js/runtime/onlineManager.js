@@ -25,6 +25,8 @@ export default class OnlineManager {
             this.playerId = this.generatePlayerId();
             this.isHost = true;
             
+            console.log('创建房间，房间号:', this.roomId, '玩家ID:', this.playerId);
+            
             // 调用云函数创建房间
             const res = await wx.cloud.callFunction({
                 name: 'gameRoom',
@@ -35,12 +37,16 @@ export default class OnlineManager {
                 }
             });
             
+            console.log('创建房间云函数返回:', res.result);
+            
             if (res.result.success) {
                 console.log('房间创建成功:', this.roomId);
                 this.startListening();
                 return this.roomId;
             } else {
-                throw new Error('创建房间失败');
+                const errorMsg = res.result.error || '创建房间失败';
+                console.error('创建房间失败:', errorMsg);
+                throw new Error(errorMsg);
             }
         } catch (error) {
             console.error('创建房间错误:', error);
@@ -59,6 +65,8 @@ export default class OnlineManager {
             this.playerId = this.generatePlayerId();
             this.isHost = false;
             
+            console.log('尝试加入房间，房间号:', roomId, '玩家ID:', this.playerId);
+            
             // 调用云函数加入房间
             const res = await wx.cloud.callFunction({
                 name: 'gameRoom',
@@ -68,6 +76,8 @@ export default class OnlineManager {
                     playerId: this.playerId
                 }
             });
+            
+            console.log('加入房间云函数返回:', res.result);
             
             if (res.result.success) {
                 console.log('加入房间成功:', this.roomId);
@@ -82,7 +92,9 @@ export default class OnlineManager {
                 
                 return true;
             } else {
-                throw new Error('房间不存在或已满');
+                const errorMsg = res.result.error || '房间不存在或已满';
+                console.error('加入房间失败:', errorMsg);
+                throw new Error(errorMsg);
             }
         } catch (error) {
             console.error('加入房间错误:', error);
