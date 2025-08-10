@@ -9,6 +9,17 @@ if (wx.cloud) {
     traceUser: true
   });
   console.log('云开发初始化成功');
+  
+  // 初始化数据库（创建必要的集合）
+  wx.cloud.callFunction({
+    name: 'initDatabase',
+    data: {}
+  }).then(res => {
+    console.log('数据库初始化结果:', res.result);
+  }).catch(error => {
+    console.error('数据库初始化失败:', error);
+    // 不影响游戏启动
+  });
 } else {
   console.log('云开发不可用，将使用本地模式');
 }
