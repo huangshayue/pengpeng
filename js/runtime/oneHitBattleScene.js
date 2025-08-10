@@ -367,6 +367,11 @@ export default class OneHitBattleScene {
             this.renderActionDisplay();
         }
         
+        // 渲染游戏结束信息
+        if (this.gameOverInfo) {
+            this.renderGameOverScreen();
+        }
+        
         // 渲染粒子效果
         this.particleSystem.draw(this.ctx);
         
@@ -531,6 +536,14 @@ export default class OneHitBattleScene {
     endGame(winner) {
         this.isGameStarted = false;
         
+        // 设置游戏结束状态
+        this.gameOverInfo = {
+            winner: winner,
+            message: winner === 1 ? '胜利！' : '失败！',
+            subMessage: winner === 1 ? '你击败了AI！' : 'AI击败了你！',
+            displayTime: 5000 // 显示5秒
+        };
+        
         // 角色胜负动画
         if (winner === 1) {
             this.playerSprite && this.playerSprite.setState('victory', 3000);
@@ -548,23 +561,53 @@ export default class OneHitBattleScene {
                     );
                 }, i * 200);
             }
+            
+            // 胜利震动
+            wx.vibrateShort({ type: 'heavy' });
+            
+            // 胜利Toast
+            wx.showToast({
+                title: '🎉 胜利！',
+                icon: 'success',
+                duration: 3000
+            });
         } else {
             this.playerSprite && this.playerSprite.setState('defeat', 3000);
             this.aiSprite && this.aiSprite.setState('victory', 3000);
             this.particleSystem.createExplosion(this.width / 2, 150, '#F44336', 50);
             this.animationSystem.createFlash('#F44336', 500);
+            
+            // 失败震动
+            wx.vibrateLong();
+            
+            // 失败Toast
+            wx.showToast({
+                title: '💀 失败！',
+                icon: 'none',
+                duration: 3000
+            });
         }
         
-        // 延迟显示开始按钮
+        // 延迟显示模态框
         setTimeout(() => {
-            this.showStartButton();
-        }, 2000);
-        
-        wx.showModal({
-            title: '游戏结束',
-            content: winner === 1 ? '🎉 你赢了！' : '💀 你输了！',
-            showCancel: false
-        });
+            wx.showModal({
+                title: winner === 1 ? '🎉 游戏胜利' : '💀 游戏失败',
+                content: winner === 1 ? 
+                    '恭喜你！你成功击败了AI！\n是否再来一局？' : 
+                    '很遗憾，你被AI击败了。\n是否重新挑战？',
+                confirmText: '再来一局',
+                cancelText: '查看战场',
+                success: (res) => {
+                    if (res.confirm) {
+                        this.startGame();
+                    } else {
+                        // 显示开始按钮，让玩家可以查看战场
+                        this.showStartButton();
+                        this.gameOverInfo = null; // 清除游戏结束信息
+                    }
+                }
+            });
+        }, 1500);
     }
 
     createButtons() {
@@ -968,6 +1011,74 @@ export default class OneHitBattleScene {
         this.ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
         this.ctx.shadowBlur = 5;
         this.ctx.fillText(display.action, boxX + 130, boxY + 75);
+        
+        this.ctx.restore();
+    }
+
+    // 渲染游戏结束画面
+    renderGameOverScreen() {
+        if (!this.gameOverInfo) return;
+        
+        // 半透明背景覆盖
+        this.ctx.save();
+        this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        this.ctx.fillRect(0, 0, this.width, this.height);
+        
+        // 游戏结束面板
+        const panelWidth = this.width - 60;
+        const panelHeight = 300;
+        const panelX = 30;
+        const panelY = (this.height - panelHeight) / 2;
+        
+        // 面板背景
+        const isVictory = this.gameOverInfo.winner === 1;
+        const gradient = this.ctx.createLinearGradient(panelX, panelY, panelX, panelY + panelHeight);
+        
+        if (isVictory) {
+            gradient.addColorStop(0, 'rgba(76, 175, 80, 0.95)');
+            gradient.addColorStop(0.5, 'rgba(129, 199, 132, 0.95)');
+            gradient.addColorStop(1, 'rgba(76, 175, 80, 0.95)');
+        } else {
+            gradient.addColorStop(0, 'rgba(244, 67, 54, 0.95)');
+            gradient.addColorStop(0.5, 'rgba(239, 83, 80, 0.95)');
+            gradient.addColorStop(1, 'rgba(244, 67, 54, 0.95)');
+        }
+        
+        this.ctx.fillStyle = gradient;
+        this.ctx.shadowColor = isVictory ? 'rgba(76, 175, 80, 0.8)' : 'rgba(244, 67, 54, 0.8)';
+        this.ctx.shadowBlur = 30;
+        this.roundRect(panelX, panelY, panelWidth, panelHeight, 20);
+        this.ctx.fill();
+        
+        // 边框
+        this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+        this.ctx.lineWidth = 3;
+        this.ctx.stroke();
+        
+        // 主标题
+        this.ctx.textAlign = 'center';
+        this.ctx.textBaseline = 'middle';
+        this.ctx.fillStyle = '#FFFFFF';
+        this.ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+        this.ctx.shadowBlur = 10;
+        
+        // 大图标
+        this.ctx.font = '80px Arial';
+        this.ctx.fillText(isVictory ? '🏆' : '💀', this.width / 2, panelY + 80);
+        
+        // 主文字
+        this.ctx.font = 'bold 48px Arial';
+        this.ctx.fillText(this.gameOverInfo.message, this.width / 2, panelY + 160);
+        
+        // 副文字
+        this.ctx.font = '24px Arial';
+        this.ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+        this.ctx.fillText(this.gameOverInfo.subMessage, this.width / 2, panelY + 210);
+        
+        // 提示文字
+        this.ctx.font = '18px Arial';
+        this.ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+        this.ctx.fillText('等待选择下一步操作...', this.width / 2, panelY + 250);
         
         this.ctx.restore();
     }
