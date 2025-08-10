@@ -1014,6 +1014,7 @@ export default class OneHitBattleScene {
     
     // 加入在线房间
     async joinOnlineRoom(roomId) {
+        console.log('开始加入房间:', roomId);
         this.gameMode = 'online';
         this.onlineManager = new OnlineManager();
         
@@ -1030,13 +1031,40 @@ export default class OneHitBattleScene {
             this.endGame(1);
         };
         
-        // 加入房间
-        const success = await this.onlineManager.joinRoom(roomId);
-        if (success) {
-            this.roomId = roomId;
-            this.startGame('online');
-        } else {
-            // 加入失败，返回模式选择
+        try {
+            // 加入房间
+            const success = await this.onlineManager.joinRoom(roomId);
+            if (success) {
+                console.log('成功加入房间:', roomId);
+                this.roomId = roomId;
+                wx.showToast({
+                    title: '加入成功！',
+                    icon: 'success',
+                    duration: 1500
+                });
+                this.startGame('online');
+            } else {
+                console.log('加入房间失败:', roomId);
+                wx.showToast({
+                    title: '房间不存在或已满',
+                    icon: 'none',
+                    duration: 2000
+                });
+                // 加入失败，返回模式选择
+                this.gameMode = null;
+                this.onlineManager = null;
+                this.showModeSelection();
+            }
+        } catch (error) {
+            console.error('加入房间出错:', error);
+            wx.showToast({
+                title: '网络错误，请重试',
+                icon: 'none',
+                duration: 2000
+            });
+            // 出错，返回模式选择
+            this.gameMode = null;
+            this.onlineManager = null;
             this.showModeSelection();
         }
     }
@@ -1122,6 +1150,13 @@ export default class OneHitBattleScene {
             });
             return;
         }
+        
+        console.log('尝试加入房间:', this.roomInputText);
+        wx.showToast({
+            title: '正在加入房间...',
+            icon: 'loading',
+            duration: 2000
+        });
         
         this.showingRoomInput = false;
         this.joinOnlineRoom(this.roomInputText);
