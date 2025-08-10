@@ -1,67 +1,82 @@
 {
   "description": "项目配置文件",
+  "packOptions": {
+    "ignore": [
+      {
+        "type": "file",
+        "value": ".eslintrc.js"
+      }
+    ]
+  },
   "setting": {
     "urlCheck": false,
     "es6": true,
     "enhance": true,
     "postcss": true,
+    "preloadBackgroundData": false,
     "minified": true,
-    "newFeature": true,
+    "newFeature": false,
+    "coverView": true,
+    "nodeModules": false,
+    "autoAudits": false,
+    "showShadowRootInWxmlPanel": true,
+    "scopeDataCheck": false,
+    "uglifyFileName": false,
+    "checkInvalidKey": true,
+    "checkSiteMap": true,
+    "uploadWithSourceMap": true,
+    "compileHotReLoad": false,
+    "lazyloadPlaceholderEnable": false,
+    "useMultiFrameRuntime": true,
     "babelSetting": {
       "ignore": [],
       "disablePlugins": [],
       "outputPath": ""
     },
-    "uglifyFileName": false,
-    "useMultiFrameRuntime": true,
-    "packNpmManually": true,
-    "packNpmRelationList": []
+    "useIsolateContext": false,
+    "userConfirmedBundleSwitch": false,
+    "packNpmManually": false,
+    "packNpmRelationList": [],
+    "minifyWXSS": true,
+    "disableUseStrict": false,
+    "showES6CompileOption": false,
+    "useCompilerPlugins": false,
+    "minifyWXML": true
   },
   "compileType": "game",
-  "libVersion": "2.32.3",
+  "libVersion": "2.19.4",
   "appid": "wxdcbb80d9528eff0c",
-  "projectname": "对战游戏",
-  "condition": {},
-  "packOptions": {
-    "ignore": [
-      {
-        "type": "folder",
-        "value": "pages"
-      },
-      {
-        "type": "folder", 
-        "value": ".git"
-      },
-      {
-        "type": "folder",
-        "value": "node_modules"
-      },
-      {
-        "type": "file",
-        "value": "*.wxml"
-      },
-      {
-        "type": "file",
-        "value": "*.wxss"
-      },
-      {
-        "type": "regexp",
-        "value": "\\.wxml$"
-      },
-      {
-        "type": "regexp",
-        "value": "\\.wxss$"
-      }
-    ],
-    "include": []
+  "projectname": "pengpeng",
+  "debugOptions": {
+    "hidedInDevtools": []
   },
-  "editorSetting": {
-    "tabIndent": "insertSpaces",
-    "tabSize": 2
+  "scripts": {},
+  "staticServerOptions": {
+    "baseURL": "",
+    "servePath": ""
   },
-  "cloudfunctionRoot": "cloudfunctions/",
-  "miniprogramRoot": "",
+  "isGameTourist": false,
+  "condition": {
+    "search": {
+      "list": []
+    },
+    "conversation": {
+      "list": []
+    },
+    "game": {
+      "list": []
+    },
+    "plugin": {
+      "list": []
+    },
+    "gamePlugin": {
+      "list": []
+    },
+    "miniprogram": {
+      "list": []
+    }
+  },
   "cloud": true,
-  "cloudbaseEnv": "cloud1-2ghmqnl5aabc85cc",
-  "cloudfunctionTemplateRoot": "cloudfunctionTemplate/"
+  "cloudbaseRoot": "",
+  "cloudfunctionRoot": "cloudfunctions/"
 }
