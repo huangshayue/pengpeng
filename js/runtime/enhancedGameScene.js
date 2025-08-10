@@ -839,7 +839,9 @@ export default class EnhancedGameScene {
     }
 
     renderButton(button) {
-        const isDisabled = this.currentPlayer !== 1 || !this.canUseAction(button.action);
+        const isDisabled = this.roundState !== 'selecting' || 
+                          this.playerAction !== null || 
+                          !this.canUseAction(button.action, 1);
         
         this.ctx.save();
         this.ctx.translate(button.x + button.width / 2, button.y + button.height / 2);
