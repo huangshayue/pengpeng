@@ -2,6 +2,7 @@ import OneHitGameState, { ActionType } from './oneHitGameState.js';
 import { ParticleSystem } from '../effects/particleSystem.js';
 import { AnimationSystem, Easing } from '../effects/animationSystem.js';
 import { CharacterSprite } from '../effects/characterSprite.js';
+import OnlineManager from './onlineManager.js';
 
 export default class OneHitBattleScene {
     constructor(ctx, width, height) {
@@ -19,7 +20,7 @@ export default class OneHitBattleScene {
         
         // 游戏状态
         this.isGameStarted = false;
-        this.gameMode = null; // 'pve' (人机) 或 'pvp' (人人)
+        this.gameMode = null; // 'pve' (人机) 或 'pvp' (人人) 或 'online' (在线)
         
         // 回合制系统
         this.currentTurn = 'player'; // 'player' 或 'ai'
@@ -31,6 +32,11 @@ export default class OneHitBattleScene {
         this.player2Action = null; // 玩家2选择的动作
         this.currentPlayer = 1; // 当前操作的玩家 (1 或 2)
         this.actionConfirmed = false; // 是否确认了动作
+        
+        // 在线对战
+        this.onlineManager = null;
+        this.isWaitingForOpponent = false;
+        this.roomId = null;
         
         // AI动作显示
         this.currentActionDisplay = null;
@@ -58,7 +64,7 @@ export default class OneHitBattleScene {
         const buttonWidth = 240;
         const buttonHeight = 70;
         const spacing = 20;
-        const totalHeight = buttonHeight * 2 + spacing;
+        const totalHeight = buttonHeight * 3 + spacing * 2;
         const startY = (this.height - totalHeight) / 2;
         
         // 人机对战按钮
@@ -72,16 +78,34 @@ export default class OneHitBattleScene {
             mode: 'pve'
         };
         
-        // 人人对战按钮
+        // 本地对战按钮
         this.pvpButton = {
             x: (this.width - buttonWidth) / 2,
             y: startY + buttonHeight + spacing,
             width: buttonWidth,
             height: buttonHeight,
-            text: '👥 人人对战',
+            text: '👥 本地对战',
             scale: 1,
             mode: 'pvp'
         };
+        
+        // 在线对战按钮
+        this.onlineButton = {
+            x: (this.width - buttonWidth) / 2,
+            y: startY + (buttonHeight + spacing) * 2,
+            width: buttonWidth,
+            height: buttonHeight,
+            text: '🌐 在线对战',
+            scale: 1,
+            mode: 'online'
+        };
+        
+        // 检查是否从分享链接进入
+        const roomId = OnlineManager.getRoomIdFromQuery();
+        if (roomId) {
+            // 直接加入房间
+            this.joinOnlineRoom(roomId);
+        }
     }
     
     showStartButton() {
@@ -258,6 +282,19 @@ export default class OneHitBattleScene {
                 }, 100);
                 return;
             }
+            if (this.onlineButton && this.checkModeButton(x, y, this.onlineButton)) {
+                this.onlineButton.scale = 0.9;
+                setTimeout(() => {
+                    this.startOnlineGame();
+                }, 100);
+                return;
+            }
+            return;
+        }
+        
+        // 处理分享按钮
+        if (this.shareButton && this.checkModeButton(x, y, this.shareButton)) {
+            this.shareRoom();
             return;
         }
         
@@ -284,6 +321,12 @@ export default class OneHitBattleScene {
         // PVP模式处理
         if (this.gameMode === 'pvp') {
             this.handlePVPTouch(action);
+            return;
+        }
+        
+        // 在线模式处理
+        if (this.gameMode === 'online') {
+            this.handleOnlineTouch(action);
             return;
         }
         
@@ -342,6 +385,57 @@ export default class OneHitBattleScene {
         this.executePlayerAction(action);
     }
 
+    // 在线模式触摸处理
+    handleOnlineTouch(action) {
+        // 检查是否已选择动作
+        if (this.player1Action) {
+            wx.showToast({
+                title: '等待对手选择',
+                icon: 'none'
+            });
+            return;
+        }
+        
+        // 检查是否可以使用该动作
+        if (!this.canUseAction(action, 1)) {
+            const player = this.gameState.player1;
+            if (player.defenseBroken && 
+                (action === ActionType.NORMAL_DEFENSE || action === ActionType.BLOOD_DEFENSE)) {
+                wx.showToast({
+                    title: '防御已破损',
+                    icon: 'none'
+                });
+            } else {
+                wx.showToast({
+                    title: '气不足',
+                    icon: 'none'
+                });
+            }
+            return;
+        }
+        
+        // 设置动作并发送给对手
+        this.player1Action = action;
+        this.onlineManager.sendAction(action);
+        
+        // 按钮动画
+        const button = Object.values(this.buttons).find(b => b.action === action);
+        if (button) {
+            button.scale = 0.8;
+            setTimeout(() => button.scale = 1, 150);
+        }
+        
+        wx.showToast({
+            title: '已选择，等待对手',
+            icon: 'none'
+        });
+        
+        // 如果对手已经选择了，执行回合
+        if (this.player2Action) {
+            this.executeOnlineRound();
+        }
+    }
+    
     // PVP模式触摸处理
     handlePVPTouch(action) {
         // 处理确认按钮
@@ -591,9 +685,11 @@ export default class OneHitBattleScene {
         
         this.renderBackground();
         
-        // 渲染模式选择
+        // 渲染模式选择或等待界面
         if (!this.gameMode && !this.isGameStarted) {
             this.renderModeSelection();
+        } else if (this.isWaitingForOpponent) {
+            this.renderWaitingScreen();
         } else if (!this.isGameStarted && this.startButton) {
             this.renderStartButton();
         } else if (this.isGameStarted) {
@@ -784,6 +880,157 @@ export default class OneHitBattleScene {
         }
     }
 
+    // 开始在线游戏
+    async startOnlineGame() {
+        this.gameMode = 'online';
+        this.onlineManager = new OnlineManager();
+        
+        // 设置回调
+        this.onlineManager.onOpponentJoined = () => {
+            this.isWaitingForOpponent = false;
+            this.startGame('online');
+        };
+        
+        this.onlineManager.onOpponentAction = (action) => {
+            this.handleOnlineOpponentAction(action);
+        };
+        
+        this.onlineManager.onOpponentLeft = () => {
+            wx.showToast({
+                title: '对手已离开',
+                icon: 'none'
+            });
+            this.endGame(1); // 对手离开算己方胜利
+        };
+        
+        // 创建房间
+        this.roomId = await this.onlineManager.createRoom();
+        this.isWaitingForOpponent = true;
+        
+        // 显示等待界面
+        this.showWaitingScreen();
+    }
+    
+    // 加入在线房间
+    async joinOnlineRoom(roomId) {
+        this.gameMode = 'online';
+        this.onlineManager = new OnlineManager();
+        
+        // 设置回调
+        this.onlineManager.onOpponentAction = (action) => {
+            this.handleOnlineOpponentAction(action);
+        };
+        
+        this.onlineManager.onOpponentLeft = () => {
+            wx.showToast({
+                title: '对手已离开',
+                icon: 'none'
+            });
+            this.endGame(1);
+        };
+        
+        // 加入房间
+        const success = await this.onlineManager.joinRoom(roomId);
+        if (success) {
+            this.roomId = roomId;
+            this.startGame('online');
+        } else {
+            // 加入失败，返回模式选择
+            this.showModeSelection();
+        }
+    }
+    
+    // 显示等待界面
+    showWaitingScreen() {
+        // 清除模式选择按钮
+        this.pveButton = null;
+        this.pvpButton = null;
+        this.onlineButton = null;
+        
+        // 显示分享按钮
+        this.shareButton = {
+            x: (this.width - 240) / 2,
+            y: this.height / 2 + 50,
+            width: 240,
+            height: 70,
+            text: '📤 邀请好友',
+            scale: 1
+        };
+    }
+    
+    // 分享房间
+    shareRoom() {
+        if (this.onlineManager && this.roomId) {
+            wx.shareAppMessage({
+                title: '来一场生死对决吧！',
+                path: `/game.js?roomId=${this.roomId}`,
+                imageUrl: '/images/share.png',
+                success: () => {
+                    wx.showToast({
+                        title: '分享成功',
+                        icon: 'success'
+                    });
+                }
+            });
+        }
+    }
+    
+    // 处理在线对手动作
+    handleOnlineOpponentAction(action) {
+        if (this.gameMode !== 'online') return;
+        
+        // 在线模式下，对手是玩家2
+        this.player2Action = action;
+        
+        // 如果自己也选择了动作，执行回合
+        if (this.player1Action && this.player2Action) {
+            this.executeOnlineRound();
+        }
+    }
+    
+    // 执行在线回合
+    executeOnlineRound() {
+        this.isProcessing = true;
+        
+        // 显示双方动作
+        this.showActionDisplay('你', this.player1Action);
+        setTimeout(() => {
+            this.showActionDisplay('对手', this.player2Action);
+        }, 500);
+        
+        // 延迟后执行动作
+        setTimeout(() => {
+            // 执行玩家1的动作
+            const success1 = this.gameState.handleAction(1, this.player1Action);
+            if (success1) {
+                this.handleActionEffects(1, this.player1Action);
+            }
+            
+            // 执行玩家2的动作
+            const success2 = this.gameState.handleAction(2, this.player2Action);
+            if (success2) {
+                this.handleActionEffects(2, this.player2Action);
+            }
+            
+            // 检查游戏结束
+            const winner = this.gameState.checkGameOver();
+            if (winner > 0) {
+                this.endGame(winner);
+            } else {
+                // 重置动作选择
+                this.player1Action = null;
+                this.player2Action = null;
+                this.isProcessing = false;
+                this.roundNumber++;
+                
+                wx.showToast({
+                    title: '新回合开始',
+                    icon: 'none'
+                });
+            }
+        }, 2000);
+    }
+    
     endGame(winner) {
         this.isGameStarted = false;
         
@@ -1048,12 +1295,49 @@ export default class OneHitBattleScene {
         this.ctx.textAlign = 'center';
         this.ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
         this.ctx.shadowBlur = 10;
-        this.ctx.fillText('选择游戏模式', this.width / 2, 100);
+        this.ctx.fillText('选择游戏模式', this.width / 2, 80);
         this.ctx.restore();
         
         // 渲染模式按钮
         this.renderModeButton(this.pveButton);
         this.renderModeButton(this.pvpButton);
+        this.renderModeButton(this.onlineButton);
+    }
+    
+    renderWaitingScreen() {
+        // 标题
+        this.ctx.save();
+        this.ctx.fillStyle = '#FFFFFF';
+        this.ctx.font = 'bold 32px Arial';
+        this.ctx.textAlign = 'center';
+        this.ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+        this.ctx.shadowBlur = 10;
+        this.ctx.fillText('等待对手加入...', this.width / 2, 100);
+        
+        // 房间号
+        if (this.roomId) {
+            this.ctx.font = 'bold 24px Arial';
+            this.ctx.fillStyle = '#FFD700';
+            this.ctx.fillText(`房间号: ${this.roomId}`, this.width / 2, 150);
+        }
+        
+        // 加载动画
+        const time = Date.now() / 1000;
+        const dots = Math.floor(time % 3) + 1;
+        let loadingText = '等待中';
+        for (let i = 0; i < dots; i++) {
+            loadingText += '.';
+        }
+        this.ctx.font = '20px Arial';
+        this.ctx.fillStyle = '#FFFFFF';
+        this.ctx.fillText(loadingText, this.width / 2, this.height / 2);
+        
+        this.ctx.restore();
+        
+        // 渲染分享按钮
+        if (this.shareButton) {
+            this.renderModeButton(this.shareButton);
+        }
     }
     
     renderModeButton(button) {
