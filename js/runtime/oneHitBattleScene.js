@@ -20,9 +20,10 @@ export default class OneHitBattleScene {
         // 游戏状态
         this.isGameStarted = false;
         
-        // 实时对战系统
-        this.playerCooldown = 0;  // 玩家动作冷却
-        this.aiNextActionTime = 2000; // AI下次行动时间
+        // 回合制系统
+        this.currentTurn = 'player'; // 'player' 或 'ai'
+        this.isProcessing = false; // 是否正在处理动作
+        this.roundNumber = 1; // 回合数
         
         // AI动作显示
         this.currentActionDisplay = null;
@@ -68,8 +69,9 @@ export default class OneHitBattleScene {
         this.gameState.reset();
         
         // 重置状态
-        this.playerCooldown = 0;
-        this.aiNextActionTime = 2000;
+        this.currentTurn = 'player';
+        this.isProcessing = false;
+        this.roundNumber = 1;
         
         // 创建角色精灵
         this.playerSprite = new CharacterSprite(this.width / 2, this.height - 150, true);
@@ -86,18 +88,16 @@ export default class OneHitBattleScene {
         });
     }
 
-    // AI独立思考和行动
-    updateAI(deltaTime) {
-        if (!this.isGameStarted || !this.gameState.player2.isAlive) return;
+    // AI回合
+    aiTurn() {
+        if (!this.isGameStarted || !this.gameState.player2.isAlive || this.currentTurn !== 'ai') return;
         
-        // 更新AI行动计时
-        this.aiNextActionTime -= deltaTime;
+        this.isProcessing = true;
         
-        if (this.aiNextActionTime <= 0) {
+        // 延迟一下让玩家看清楚
+        setTimeout(() => {
             this.performAIAction();
-            // 设置下次行动时间（1-2.5秒随机）
-            this.aiNextActionTime = 1000 + Math.random() * 1500;
-        }
+        }, 800);
     }
 
     // AI执行动作
@@ -181,6 +181,13 @@ export default class OneHitBattleScene {
             const winner = this.gameState.checkGameOver();
             if (winner > 0) {
                 setTimeout(() => this.endGame(winner), 1000);
+            } else {
+                // 回到玩家回合
+                setTimeout(() => {
+                    this.currentTurn = 'player';
+                    this.isProcessing = false;
+                    this.roundNumber++;
+                }, 1500);
             }
         }
     }
@@ -215,10 +222,19 @@ export default class OneHitBattleScene {
             return;
         }
 
-        // 检查冷却
-        if (this.playerCooldown > 0) {
+        // 检查是否玩家回合
+        if (this.currentTurn !== 'player') {
             wx.showToast({
-                title: `冷却中 ${Math.ceil(this.playerCooldown/1000)}s`,
+                title: 'AI回合中...',
+                icon: 'none'
+            });
+            return;
+        }
+        
+        // 检查是否正在处理
+        if (this.isProcessing) {
+            wx.showToast({
+                title: '处理中...',
                 icon: 'none'
             });
             return;
@@ -254,23 +270,25 @@ export default class OneHitBattleScene {
 
     // 执行玩家动作
     executePlayerAction(action) {
+        this.isProcessing = true;
         const success = this.gameState.handleAction(1, action);
         
         if (success) {
             this.handleActionEffects(1, action);
             
-            // 设置冷却时间
-            if (this.isAttackAction(action)) {
-                this.playerCooldown = 600; // 攻击动作0.6秒冷却
-            } else {
-                this.playerCooldown = 400; // 其他动作0.4秒冷却
-            }
-            
             // 检查游戏结束
             const winner = this.gameState.checkGameOver();
             if (winner > 0) {
                 this.endGame(winner);
+            } else {
+                // 切换到AI回合
+                this.currentTurn = 'ai';
+                setTimeout(() => {
+                    this.aiTurn();
+                }, 500);
             }
+        } else {
+            this.isProcessing = false;
         }
     }
 
@@ -280,13 +298,7 @@ export default class OneHitBattleScene {
         const deltaTime = currentTime - this.lastTime;
         this.lastTime = currentTime;
         
-        // 更新玩家冷却
-        if (this.playerCooldown > 0) {
-            this.playerCooldown = Math.max(0, this.playerCooldown - deltaTime);
-        }
-        
-        // 更新AI
-        this.updateAI(deltaTime);
+        // 回合制不需要更新AI和冷却
         
         // 更新粒子系统
         this.particleSystem.update();
@@ -373,16 +385,30 @@ export default class OneHitBattleScene {
         this.ctx.shadowColor = '#000000';
         this.ctx.shadowBlur = 3;
         
-        // 显示一击必杀模式
-        this.ctx.fillStyle = '#FF5722';
-        this.ctx.fillText('⚔️ 一击必杀', this.width / 2, this.height / 2);
+        // 显示回合数
+        this.ctx.fillStyle = '#2196F3';
+        this.ctx.fillText(`回合 ${this.roundNumber}`, this.width / 2, this.height / 2 - 20);
         
-        // 显示冷却状态
-        if (this.playerCooldown > 0) {
-            this.ctx.fillStyle = '#FFC107';
-            this.ctx.font = '16px Arial';
-            this.ctx.fillText(`冷却: ${(this.playerCooldown/1000).toFixed(1)}s`, this.width / 2, this.height / 2 + 25);
+        // 显示当前轮次
+        let turnText = '';
+        let turnColor = '#4CAF50';
+        
+        if (this.currentTurn === 'player') {
+            turnText = '你的回合';
+            turnColor = '#4CAF50';
+        } else if (this.currentTurn === 'ai') {
+            turnText = 'AI回合';
+            turnColor = '#FF5722';
         }
+        
+        this.ctx.fillStyle = turnColor;
+        this.ctx.font = 'bold 24px Arial';
+        this.ctx.fillText(turnText, this.width / 2, this.height / 2 + 10);
+        
+        // 显示一击必杀标志
+        this.ctx.fillStyle = '#FF5722';
+        this.ctx.font = '16px Arial';
+        this.ctx.fillText('⚔️ 一击必杀', this.width / 2, this.height / 2 + 35);
         
         this.ctx.restore();
     }
@@ -823,7 +849,8 @@ export default class OneHitBattleScene {
     renderButton(button) {
         const player = this.gameState.player1;
         const isDisabled = !player.isAlive || 
-                          this.playerCooldown > 0 || 
+                          this.currentTurn !== 'player' || 
+                          this.isProcessing ||
                           !this.canUseAction(button.action, 1);
         
         this.ctx.save();
