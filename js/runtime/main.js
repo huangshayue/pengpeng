@@ -1,4 +1,4 @@
-import EnhancedGameScene from './enhancedGameScene.js';
+import RealtimeBattleScene from './realtimeBattleScene.js';
 
 // 游戏主类
 export default class Main {
@@ -60,7 +60,7 @@ export default class Main {
     initGameScene() {
         console.log('开始初始化游戏场景');
         try {
-            this.gameScene = new EnhancedGameScene(
+            this.gameScene = new RealtimeBattleScene(
                 this.ctx,
                 this.canvasWidth,
                 this.canvasHeight
