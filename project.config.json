@@ -23,7 +23,20 @@
   "projectname": "对战游戏",
   "condition": {},
   "packOptions": {
-    "ignore": [],
+    "ignore": [
+      {
+        "type": "file",
+        "value": "pages/"
+      },
+      {
+        "type": "file", 
+        "value": ".git/"
+      },
+      {
+        "type": "file",
+        "value": "node_modules/"
+      }
+    ],
     "include": []
   },
   "editorSetting": {
