@@ -38,6 +38,14 @@ export default class OneHitBattleScene {
         this.isWaitingForOpponent = false;
         this.roomId = null;
         
+        // 房间号输入
+        this.showingRoomInput = false;
+        this.roomInputText = '';
+        this.numberButtons = [];
+        this.deleteButton = null;
+        this.confirmJoinButton = null;
+        this.cancelJoinButton = null;
+        
         // AI动作显示
         this.currentActionDisplay = null;
         this.actionDisplayTimer = 0;
@@ -64,7 +72,7 @@ export default class OneHitBattleScene {
         const buttonWidth = 240;
         const buttonHeight = 70;
         const spacing = 20;
-        const totalHeight = buttonHeight * 3 + spacing * 2;
+        const totalHeight = buttonHeight * 4 + spacing * 3;
         const startY = (this.height - totalHeight) / 2;
         
         // 人机对战按钮
@@ -89,15 +97,26 @@ export default class OneHitBattleScene {
             mode: 'pvp'
         };
         
-        // 在线对战按钮
+        // 创建房间按钮
         this.onlineButton = {
             x: (this.width - buttonWidth) / 2,
             y: startY + (buttonHeight + spacing) * 2,
             width: buttonWidth,
             height: buttonHeight,
-            text: '🌐 在线对战',
+            text: '🌐 创建房间',
             scale: 1,
             mode: 'online'
+        };
+        
+        // 加入房间按钮
+        this.joinRoomButton = {
+            x: (this.width - buttonWidth) / 2,
+            y: startY + (buttonHeight + spacing) * 3,
+            width: buttonWidth,
+            height: buttonHeight,
+            text: '🔗 加入房间',
+            scale: 1,
+            mode: 'join'
         };
         
         // 检查是否从分享链接进入
@@ -266,6 +285,38 @@ export default class OneHitBattleScene {
 
     // 处理玩家触摸
     handleTouch(x, y) {
+        // 处理输入房间号界面
+        if (this.showingRoomInput) {
+            if (this.confirmJoinButton && this.checkModeButton(x, y, this.confirmJoinButton)) {
+                this.handleJoinWithRoomId();
+                return;
+            }
+            if (this.cancelJoinButton && this.checkModeButton(x, y, this.cancelJoinButton)) {
+                this.showingRoomInput = false;
+                this.roomInputText = '';
+                this.showModeSelection();
+                return;
+            }
+            // 处理数字按钮点击
+            for (let i = 0; i < 10; i++) {
+                const button = this.numberButtons[i];
+                if (button && this.checkModeButton(x, y, button)) {
+                    if (this.roomInputText.length < 6) {
+                        this.roomInputText += i.toString();
+                    }
+                    return;
+                }
+            }
+            // 处理删除按钮
+            if (this.deleteButton && this.checkModeButton(x, y, this.deleteButton)) {
+                if (this.roomInputText.length > 0) {
+                    this.roomInputText = this.roomInputText.slice(0, -1);
+                }
+                return;
+            }
+            return;
+        }
+        
         // 处理模式选择
         if (!this.gameMode && !this.isGameStarted) {
             if (this.pveButton && this.checkModeButton(x, y, this.pveButton)) {
@@ -286,6 +337,13 @@ export default class OneHitBattleScene {
                 this.onlineButton.scale = 0.9;
                 setTimeout(() => {
                     this.startOnlineGame();
+                }, 100);
+                return;
+            }
+            if (this.joinRoomButton && this.checkModeButton(x, y, this.joinRoomButton)) {
+                this.joinRoomButton.scale = 0.9;
+                setTimeout(() => {
+                    this.showRoomInputScreen();
                 }, 100);
                 return;
             }
@@ -686,7 +744,9 @@ export default class OneHitBattleScene {
         this.renderBackground();
         
         // 渲染模式选择或等待界面
-        if (!this.gameMode && !this.isGameStarted) {
+        if (this.showingRoomInput) {
+            this.renderRoomInputScreen();
+        } else if (!this.gameMode && !this.isGameStarted) {
             this.renderModeSelection();
         } else if (this.isWaitingForOpponent) {
             this.renderWaitingScreen();
@@ -940,12 +1000,99 @@ export default class OneHitBattleScene {
         }
     }
     
+    // 显示房间号输入界面
+    showRoomInputScreen() {
+        this.showingRoomInput = true;
+        this.roomInputText = '';
+        
+        // 清除模式选择按钮
+        this.pveButton = null;
+        this.pvpButton = null;
+        this.onlineButton = null;
+        this.joinRoomButton = null;
+        
+        // 创建数字键盘
+        this.numberButtons = [];
+        const numWidth = 60;
+        const numHeight = 60;
+        const numStartX = (this.width - numWidth * 3 - 20) / 2;
+        const numStartY = this.height / 2;
+        
+        // 1-9数字按钮
+        for (let i = 1; i <= 9; i++) {
+            const row = Math.floor((i - 1) / 3);
+            const col = (i - 1) % 3;
+            this.numberButtons[i] = {
+                x: numStartX + col * (numWidth + 10),
+                y: numStartY + row * (numHeight + 10),
+                width: numWidth,
+                height: numHeight,
+                text: i.toString(),
+                value: i
+            };
+        }
+        
+        // 0按钮
+        this.numberButtons[0] = {
+            x: numStartX + (numWidth + 10),
+            y: numStartY + 3 * (numHeight + 10),
+            width: numWidth,
+            height: numHeight,
+            text: '0',
+            value: 0
+        };
+        
+        // 删除按钮
+        this.deleteButton = {
+            x: numStartX + 2 * (numWidth + 10),
+            y: numStartY + 3 * (numHeight + 10),
+            width: numWidth,
+            height: numHeight,
+            text: '⌫',
+            action: 'delete'
+        };
+        
+        // 确认和取消按钮
+        this.confirmJoinButton = {
+            x: (this.width - 240) / 2,
+            y: numStartY + 5 * (numHeight + 10),
+            width: 110,
+            height: 50,
+            text: '加入',
+            color: '#4CAF50'
+        };
+        
+        this.cancelJoinButton = {
+            x: (this.width - 240) / 2 + 130,
+            y: numStartY + 5 * (numHeight + 10),
+            width: 110,
+            height: 50,
+            text: '取消',
+            color: '#F44336'
+        };
+    }
+    
+    // 处理加入房间
+    handleJoinWithRoomId() {
+        if (this.roomInputText.length !== 6) {
+            wx.showToast({
+                title: '请输入6位房间号',
+                icon: 'none'
+            });
+            return;
+        }
+        
+        this.showingRoomInput = false;
+        this.joinOnlineRoom(this.roomInputText);
+    }
+    
     // 显示等待界面
     showWaitingScreen() {
         // 清除模式选择按钮
         this.pveButton = null;
         this.pvpButton = null;
         this.onlineButton = null;
+        this.joinRoomButton = null;
         
         // 显示分享按钮
         this.shareButton = {
@@ -1295,13 +1442,105 @@ export default class OneHitBattleScene {
         this.ctx.textAlign = 'center';
         this.ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
         this.ctx.shadowBlur = 10;
-        this.ctx.fillText('选择游戏模式', this.width / 2, 80);
+        this.ctx.fillText('选择游戏模式', this.width / 2, 60);
         this.ctx.restore();
         
         // 渲染模式按钮
         this.renderModeButton(this.pveButton);
         this.renderModeButton(this.pvpButton);
         this.renderModeButton(this.onlineButton);
+        this.renderModeButton(this.joinRoomButton);
+    }
+    
+    renderRoomInputScreen() {
+        // 标题
+        this.ctx.save();
+        this.ctx.fillStyle = '#FFFFFF';
+        this.ctx.font = 'bold 32px Arial';
+        this.ctx.textAlign = 'center';
+        this.ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+        this.ctx.shadowBlur = 10;
+        this.ctx.fillText('输入房间号', this.width / 2, 80);
+        
+        // 显示输入框
+        const inputBoxWidth = 240;
+        const inputBoxHeight = 60;
+        const inputBoxX = (this.width - inputBoxWidth) / 2;
+        const inputBoxY = 120;
+        
+        // 输入框背景
+        this.ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+        this.ctx.strokeStyle = '#FFFFFF';
+        this.ctx.lineWidth = 2;
+        this.roundRect(inputBoxX, inputBoxY, inputBoxWidth, inputBoxHeight, 10);
+        this.ctx.fill();
+        this.ctx.stroke();
+        
+        // 显示输入的数字
+        this.ctx.font = 'bold 36px monospace';
+        this.ctx.fillStyle = '#FFD700';
+        this.ctx.textAlign = 'center';
+        this.ctx.textBaseline = 'middle';
+        
+        let displayText = this.roomInputText || '';
+        // 补充下划线
+        for (let i = displayText.length; i < 6; i++) {
+            displayText += '_';
+        }
+        this.ctx.fillText(displayText, this.width / 2, inputBoxY + inputBoxHeight / 2);
+        
+        // 提示文字
+        this.ctx.font = '16px Arial';
+        this.ctx.fillStyle = '#FFFFFF';
+        this.ctx.fillText('请输入6位数字房间号', this.width / 2, inputBoxY + inputBoxHeight + 30);
+        
+        this.ctx.restore();
+        
+        // 渲染数字键盘
+        for (let i = 0; i <= 9; i++) {
+            const button = this.numberButtons[i];
+            if (button) {
+                this.renderNumberButton(button);
+            }
+        }
+        
+        // 渲染删除按钮
+        if (this.deleteButton) {
+            this.renderNumberButton(this.deleteButton);
+        }
+        
+        // 渲染确认和取消按钮
+        if (this.confirmJoinButton) {
+            this.renderControlButton(this.confirmJoinButton);
+        }
+        if (this.cancelJoinButton) {
+            this.renderControlButton(this.cancelJoinButton);
+        }
+    }
+    
+    renderNumberButton(button) {
+        this.ctx.save();
+        
+        // 按钮背景
+        const gradient = this.ctx.createLinearGradient(button.x, button.y, button.x + button.width, button.y);
+        gradient.addColorStop(0, 'rgba(255, 255, 255, 0.2)');
+        gradient.addColorStop(1, 'rgba(255, 255, 255, 0.1)');
+        
+        this.ctx.fillStyle = gradient;
+        this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+        this.ctx.lineWidth = 1;
+        this.roundRect(button.x, button.y, button.width, button.height, 8);
+        this.ctx.fill();
+        this.ctx.stroke();
+        
+        // 按钮文字
+        this.ctx.fillStyle = '#FFFFFF';
+        this.ctx.font = 'bold 24px Arial';
+        this.ctx.textAlign = 'center';
+        this.ctx.textBaseline = 'middle';
+        this.ctx.fillText(button.text, button.x + button.width / 2, button.y + button.height / 2);
+        
+        this.ctx.restore();
     }
     
     renderWaitingScreen() {
