@@ -1,6 +1,7 @@
 import GameState, { ActionType } from './gameState.js';
 import { ParticleSystem } from '../effects/particleSystem.js';
 import { AnimationSystem, Easing } from '../effects/animationSystem.js';
+import { CharacterSprite } from '../effects/characterSprite.js';
 
 export default class EnhancedGameScene {
     constructor(ctx, width, height) {
@@ -21,6 +22,11 @@ export default class EnhancedGameScene {
         this.currentPlayer = 1;
         this.isAIMode = true;
         
+        // AI动作显示
+        this.currentActionDisplay = null;
+        this.actionDisplayTimer = 0;
+        this.aiActionAnimation = 0; // 动画进度
+        
         // 动画相关
         this.lastTime = Date.now();
         this.buttonAnimations = {};
@@ -31,6 +37,10 @@ export default class EnhancedGameScene {
         
         // 背景渐变动画
         this.gradientOffset = 0;
+        
+        // 角色精灵
+        this.playerSprite = null;
+        this.aiSprite = null;
         
         // 初始化
         this.init();
@@ -63,6 +73,10 @@ export default class EnhancedGameScene {
         this.startButton = null;
         this.gameState.reset();
         this.currentPlayer = 1;
+        
+        // 创建角色精灵
+        this.playerSprite = new CharacterSprite(this.width / 2, this.height - 150, true);
+        this.aiSprite = new CharacterSprite(this.width / 2, 150, false);
         
         // 播放开始动画
         this.animationSystem.createFlash('#4CAF50', 300);
@@ -97,6 +111,9 @@ export default class EnhancedGameScene {
             const success = this.gameState.handleAction(2, randomAction);
             
             if (success) {
+                // 显示AI的动作（更长时间）
+                this.showActionDisplay('AI', randomAction);
+                this.actionDisplayTimer = 3000; // AI动作显示3秒
                 this.handleActionEffects(2, randomAction);
                 
                 if (randomAction !== ActionType.NORMAL_DEFENSE && randomAction !== ActionType.BLOOD_DEFENSE) {
@@ -114,55 +131,149 @@ export default class EnhancedGameScene {
         }, 1000);
     }
 
+    // 显示动作提示
+    showActionDisplay(playerName, action) {
+        const actionNames = {
+            [ActionType.ACCUMULATE]: '积气',
+            [ActionType.NORMAL_DEFENSE]: '普挡',
+            [ActionType.BLOOD_DEFENSE]: '血挡',
+            [ActionType.FINGER_ATTACK]: '一指攻击',
+            [ActionType.WAVE_ATTACK]: '发波攻击',
+            [ActionType.GRIND_ATTACK]: '磨磨攻击'
+        };
+        
+        this.currentActionDisplay = {
+            player: playerName,
+            action: actionNames[action] || action,
+            icon: this.getActionIcon(action)
+        };
+        this.actionDisplayTimer = 2000; // 显示2秒
+    }
+    
+    // 获取动作图标
+    getActionIcon(action) {
+        const icons = {
+            [ActionType.ACCUMULATE]: '⚡',
+            [ActionType.NORMAL_DEFENSE]: '🛡️',
+            [ActionType.BLOOD_DEFENSE]: '💗',
+            [ActionType.FINGER_ATTACK]: '👆',
+            [ActionType.WAVE_ATTACK]: '🌊',
+            [ActionType.GRIND_ATTACK]: '⚔️'
+        };
+        return icons[action] || '❓';
+    }
+    
+    
     handleActionEffects(player, action) {
         const isPlayer1 = player === 1;
         const x = this.width / 2;
         const y = isPlayer1 ? this.height - 200 : 100;
+        const sprite = isPlayer1 ? this.playerSprite : this.aiSprite;
+        const targetSprite = isPlayer1 ? this.aiSprite : this.playerSprite;
         
         switch (action) {
             case ActionType.ACCUMULATE:
+                sprite.setState('charge', 1000);
                 this.particleSystem.createEnergyGather(x, y, 15);
                 this.animationSystem.createFlash('#2196F3', 200);
                 break;
                 
             case ActionType.NORMAL_DEFENSE:
             case ActionType.BLOOD_DEFENSE:
+                sprite.setState('defend', 2000);
                 this.particleSystem.createShield(x, y, 80);
                 break;
                 
             case ActionType.FINGER_ATTACK:
+                sprite.setState('attack', 800);
+                targetSprite.setState('hurt', 500);
                 this.particleSystem.createExplosion(x, isPlayer1 ? 100 : this.height - 200, '#FFD700', 10);
                 this.animationSystem.createShake(3, 200);
-                this.animationSystem.createDamageNumber(x, isPlayer1 ? 100 : this.height - 200, 10, '#FFD700');
+                // 根据实际伤害显示
+                const fingerDamage = this.calculateActualDamage(10, isPlayer1 ? 2 : 1);
+                if (fingerDamage > 0) {
+                    this.animationSystem.createDamageNumber(x, isPlayer1 ? 100 : this.height - 200, fingerDamage, '#FFD700');
+                }
                 break;
                 
             case ActionType.WAVE_ATTACK:
+                sprite.setState('attack', 1000);
+                targetSprite.setState('hurt', 800);
                 this.particleSystem.createExplosion(x, isPlayer1 ? 100 : this.height - 200, '#FF6B6B', 25);
                 this.animationSystem.createShake(8, 400);
                 this.animationSystem.createFlash('#FF6B6B', 300);
-                this.animationSystem.createDamageNumber(x, isPlayer1 ? 100 : this.height - 200, 50, '#FF6B6B');
+                const waveDamage = this.calculateActualDamage(50, isPlayer1 ? 2 : 1);
+                if (waveDamage > 0) {
+                    this.animationSystem.createDamageNumber(x, isPlayer1 ? 100 : this.height - 200, waveDamage, '#FF6B6B');
+                }
                 break;
                 
             case ActionType.GRIND_ATTACK:
-                this.particleSystem.createExplosion(x, isPlayer1 ? 100 : this.height - 200, '#9C27B0', 15);
-                this.animationSystem.createShake(5, 300);
-                this.animationSystem.createDamageNumber(x, isPlayer1 ? 100 : this.height - 200, 20, '#9C27B0');
+                sprite.setState('attack', 900);
+                const target = isPlayer1 ? this.gameState.player2 : this.gameState.player1;
+                const grindDamage = target.isDefending && target.defenseType === 'blood' ? 100 : 
+                                   this.calculateActualDamage(20, isPlayer1 ? 2 : 1);
+                if (grindDamage > 0) {
+                    targetSprite.setState('hurt', 1000);
+                    this.particleSystem.createExplosion(x, isPlayer1 ? 100 : this.height - 200, '#9C27B0', 15);
+                    this.animationSystem.createShake(5, 300);
+                    this.animationSystem.createDamageNumber(x, isPlayer1 ? 100 : this.height - 200, grindDamage, '#9C27B0');
+                    if (grindDamage === 100) {
+                        // 破血挡特效
+                        this.animationSystem.createFlash('#9C27B0', 500);
+                        this.particleSystem.createExplosion(x, isPlayer1 ? 100 : this.height - 200, '#FF0000', 40);
+                    }
+                }
                 break;
         }
     }
 
+    // 计算实际伤害（用于显示）
+    calculateActualDamage(baseDamage, targetPlayer) {
+        const target = targetPlayer === 1 ? this.gameState.player1 : this.gameState.player2;
+        if (!target.isDefending) return baseDamage;
+        
+        if (baseDamage === 10) { // 一指
+            return target.defenseType === 'normal' ? 5 : 0;
+        } else if (baseDamage === 50) { // 发波
+            return target.defenseType === 'normal' ? 45 : 0;
+        } else if (baseDamage === 20) { // 磨磨
+            return target.defenseType === 'normal' ? 15 : baseDamage;
+        }
+        return baseDamage;
+    }
+    
     endGame(winner) {
         this.isGameStarted = false;
-        this.showStartButton();
         
-        // 胜利动画
+        // 角色胜负动画
         if (winner === 1) {
-            this.particleSystem.createExplosion(this.width / 2, this.height / 2, '#4CAF50', 50);
+            this.playerSprite && this.playerSprite.setState('victory', 3000);
+            this.aiSprite && this.aiSprite.setState('defeat', 3000);
+            this.particleSystem.createExplosion(this.width / 2, this.height - 150, '#4CAF50', 50);
             this.animationSystem.createFlash('#4CAF50', 500);
+            
+            // 胜利特效
+            for (let i = 0; i < 10; i++) {
+                setTimeout(() => {
+                    this.particleSystem.createExplosion(
+                        Math.random() * this.width,
+                        Math.random() * this.height,
+                        '#FFD700', 20
+                    );
+                }, i * 200);
+            }
         } else {
-            this.particleSystem.createExplosion(this.width / 2, this.height / 2, '#F44336', 50);
+            this.playerSprite && this.playerSprite.setState('defeat', 3000);
+            this.aiSprite && this.aiSprite.setState('victory', 3000);
+            this.particleSystem.createExplosion(this.width / 2, 150, '#F44336', 50);
             this.animationSystem.createFlash('#F44336', 500);
         }
+        
+        // 延迟显示开始按钮
+        setTimeout(() => {
+            this.showStartButton();
+        }, 2000);
         
         wx.showModal({
             title: '游戏结束',
@@ -303,6 +414,7 @@ export default class EnhancedGameScene {
 
         const success = this.gameState.handleAction(1, action);
         if (success) {
+            // 不显示玩家自己的动作
             this.handleActionEffects(1, action);
             
             if (action !== ActionType.NORMAL_DEFENSE && action !== ActionType.BLOOD_DEFENSE) {
@@ -346,6 +458,28 @@ export default class EnhancedGameScene {
                 button.scale = Math.min(1, button.scale + deltaTime * 0.005);
             }
         });
+        
+        // 更新动作显示计时器
+        if (this.actionDisplayTimer > 0) {
+            this.actionDisplayTimer -= deltaTime;
+            if (this.actionDisplayTimer <= 0) {
+                this.currentActionDisplay = null;
+                this.aiActionAnimation = 0;
+            }
+        }
+        
+        // 更新AI动作动画
+        if (this.currentActionDisplay && this.currentActionDisplay.player === 'AI') {
+            this.aiActionAnimation += deltaTime * 0.005;
+        }
+        
+        // 更新角色精灵
+        if (this.playerSprite) {
+            this.playerSprite.update(deltaTime);
+        }
+        if (this.aiSprite) {
+            this.aiSprite.update(deltaTime);
+        }
     }
 
     render() {
@@ -360,9 +494,18 @@ export default class EnhancedGameScene {
         if (!this.isGameStarted && this.startButton) {
             this.renderStartButton();
         } else if (this.isGameStarted) {
+            // 先渲染角色
+            if (this.playerSprite) {
+                this.playerSprite.draw(this.ctx);
+            }
+            if (this.aiSprite) {
+                this.aiSprite.draw(this.ctx);
+            }
+            
             this.renderGameUI();
             this.renderButtons();
             this.renderTurnIndicator();
+            this.renderActionDisplay();
         }
         
         // 渲染粒子效果
@@ -579,6 +722,113 @@ export default class EnhancedGameScene {
         this.ctx.shadowColor = color;
         this.ctx.shadowBlur = 10;
         this.ctx.fillText(text, this.width / 2, this.height / 2);
+        this.ctx.restore();
+    }
+    
+    // 渲染AI动作显示
+    renderActionDisplay() {
+        if (!this.currentActionDisplay || this.currentActionDisplay.player !== 'AI') return;
+        
+        const display = this.currentActionDisplay;
+        const alpha = this.actionDisplayTimer > 2500 ? 1 : Math.max(0, this.actionDisplayTimer / 500);
+        
+        this.ctx.save();
+        this.ctx.globalAlpha = alpha;
+        
+        // 动态缩放效果
+        const scale = 1 + Math.sin(this.aiActionAnimation) * 0.05;
+        
+        // 超大显示框
+        const boxWidth = 350;
+        const boxHeight = 120;
+        const boxX = (this.width - boxWidth) / 2;
+        const boxY = 180; // 放在AI卡片下方
+        
+        this.ctx.save();
+        this.ctx.translate(boxX + boxWidth / 2, boxY + boxHeight / 2);
+        this.ctx.scale(scale, scale);
+        this.ctx.translate(-(boxX + boxWidth / 2), -(boxY + boxHeight / 2));
+        
+        // 动作类型决定颜色
+        let bgColor1, bgColor2, shadowColor;
+        if (display.action.includes('攻击')) {
+            bgColor1 = 'rgba(255, 61, 0, 0.95)';
+            bgColor2 = 'rgba(255, 111, 0, 0.95)';
+            shadowColor = 'rgba(255, 61, 0, 0.8)';
+        } else if (display.action.includes('挡')) {
+            bgColor1 = 'rgba(156, 39, 176, 0.95)';
+            bgColor2 = 'rgba(171, 71, 188, 0.95)';
+            shadowColor = 'rgba(156, 39, 176, 0.8)';
+        } else {
+            bgColor1 = 'rgba(33, 150, 243, 0.95)';
+            bgColor2 = 'rgba(66, 165, 245, 0.95)';
+            shadowColor = 'rgba(33, 150, 243, 0.8)';
+        }
+        
+        // 渐变背景
+        const gradient = this.ctx.createLinearGradient(boxX, boxY, boxX, boxY + boxHeight);
+        gradient.addColorStop(0, bgColor1);
+        gradient.addColorStop(0.5, bgColor2);
+        gradient.addColorStop(1, bgColor1);
+        
+        this.ctx.fillStyle = gradient;
+        this.ctx.shadowColor = shadowColor;
+        this.ctx.shadowBlur = 40;
+        this.roundRect(boxX, boxY, boxWidth, boxHeight, 20);
+        this.ctx.fill();
+        
+        // 双层边框
+        this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+        this.ctx.lineWidth = 4;
+        this.ctx.stroke();
+        
+        this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+        this.ctx.lineWidth = 8;
+        this.ctx.stroke();
+        
+        this.ctx.restore();
+        
+        // 左侧大图标
+        const iconSize = 60 + Math.sin(this.aiActionAnimation * 2) * 5;
+        this.ctx.font = `${iconSize}px Arial`;
+        this.ctx.textAlign = 'center';
+        this.ctx.fillStyle = '#FFFFFF';
+        this.ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+        this.ctx.shadowBlur = 10;
+        this.ctx.fillText(display.icon, boxX + 70, boxY + 75);
+        
+        // 右侧文字
+        this.ctx.textAlign = 'left';
+        
+        // 顶部小标题
+        this.ctx.font = 'bold 18px Arial';
+        this.ctx.fillStyle = '#FFE082';
+        this.ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+        this.ctx.shadowBlur = 3;
+        this.ctx.fillText('⚠️ AI行动', boxX + 130, boxY + 35);
+        
+        // 主要动作名称
+        this.ctx.font = 'bold 36px Arial';
+        this.ctx.fillStyle = '#FFFFFF';
+        this.ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+        this.ctx.shadowBlur = 5;
+        this.ctx.fillText(display.action + '!', boxX + 130, boxY + 75);
+        
+        // 底部效果说明
+        this.ctx.font = '14px Arial';
+        this.ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+        let effectText = '';
+        if (display.action === '积气') effectText = '气 +1';
+        else if (display.action === '普挡') effectText = '减少 50% 伤害';
+        else if (display.action === '血挡') effectText = '完全防御，生命 -5';
+        else if (display.action === '一指攻击') effectText = '造成 10 点伤害';
+        else if (display.action === '发波攻击') effectText = '造成 50 点伤害';
+        else if (display.action === '磨磨攻击') effectText = '造成 20 点伤害，破除血挡';
+        
+        if (effectText) {
+            this.ctx.fillText(effectText, boxX + 130, boxY + 100);
+        }
+        
         this.ctx.restore();
     }
 

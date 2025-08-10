@@ -99,9 +99,22 @@ export default class GameState {
         }
 
         attacker.qi -= 1;
-        const damage = this.calculateDamage(10, defender);
-        defender.health = Math.max(0, defender.health - damage);
         
+        // 一指攻击：基础伤害10，但被普挡完全防御
+        let damage = 10;
+        if (defender.isDefending) {
+            if (defender.defenseType === 'normal') {
+                // 普挡防御值5，完全抵消一指的10点伤害
+                damage = Math.max(0, damage - 5);
+                console.log('普挡防御，一指攻击被完全抵消');
+            } else if (defender.defenseType === 'blood') {
+                // 血挡无限防御
+                damage = 0;
+                console.log('血挡完全防御一指攻击');
+            }
+        }
+        
+        defender.health = Math.max(0, defender.health - damage);
         console.log('一指攻击造成伤害:', damage);
         return true;
     }
@@ -114,9 +127,22 @@ export default class GameState {
         }
 
         attacker.qi -= 5;
-        const damage = this.calculateDamage(50, defender);
-        defender.health = Math.max(0, defender.health - damage);
         
+        // 发波攻击：基础伤害50，可以破普挡
+        let damage = 50;
+        if (defender.isDefending) {
+            if (defender.defenseType === 'normal') {
+                // 普挡只能减少5点伤害，发波可以破防
+                damage = damage - 5;
+                console.log('发波攻击破解普挡，造成', damage, '点伤害');
+            } else if (defender.defenseType === 'blood') {
+                // 血挡依然可以完全防御发波
+                damage = 0;
+                console.log('血挡完全防御发波攻击');
+            }
+        }
+        
+        defender.health = Math.max(0, defender.health - damage);
         console.log('发波攻击造成伤害:', damage);
         return true;
     }
@@ -130,38 +156,31 @@ export default class GameState {
 
         attacker.qi -= 2;
         
-        // 磨磨可以破除血挡
-        if (defender.isDefending && defender.defenseType === 'blood') {
-            defender.isDefending = false;
-            defender.defenseType = null;
-            console.log('磨磨破除了血挡');
+        // 磨磨攻击：基础伤害20
+        let damage = 20;
+        
+        if (defender.isDefending) {
+            if (defender.defenseType === 'blood') {
+                // 磨磨直接破血挡，造成100%伤害
+                defender.isDefending = false;
+                defender.defenseType = null;
+                damage = 100; // 直接击破，造成100点伤害
+                console.log('磨磨破除血挡！造成100点伤害！');
+            } else if (defender.defenseType === 'normal') {
+                // 普挡可以防御磨磨
+                damage = Math.max(0, damage - 5);
+                console.log('普挡防御磨磨，减少5点伤害');
+            }
         }
         
-        const damage = this.calculateDamage(20, defender);
         defender.health = Math.max(0, defender.health - damage);
-        
         console.log('磨磨攻击造成伤害:', damage);
         return true;
     }
 
-    // 计算实际伤害
+    // 计算实际伤害（已废弃，直接在各攻击方法中处理）
     calculateDamage(baseDamage, defender) {
-        if (!defender.isDefending) {
-            return baseDamage;
-        }
-
-        switch (defender.defenseType) {
-            case 'normal':
-                // 普挡减少50%伤害
-                return Math.floor(baseDamage * 0.5);
-            case 'blood':
-                // 血挡完全防御，但扣除5点生命值作为代价
-                defender.health = Math.max(0, defender.health - 5);
-                console.log('血挡消耗5点生命值');
-                return 0;
-            default:
-                return baseDamage;
-        }
+        return baseDamage;
     }
 
     // 检查游戏是否结束
