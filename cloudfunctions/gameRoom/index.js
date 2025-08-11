@@ -60,20 +60,34 @@ async function createRoom(roomId, playerId, openId) {
   console.log('查找已存在房间结果:', existingRoom.data.length)
   
   if (existingRoom.data.length > 0) {
-    // 如果房间已存在，更新房间信息
-    console.log('更新已存在房间:', existingRoom.data[0]._id)
-    await rooms.doc(existingRoom.data[0]._id).update({
-      data: {
-        host: {
-          playerId: playerId,
-          openId: openId,
-          joinTime: new Date()
-        },
-        guest: null,  // 清空访客，重新等待
-        status: 'waiting',
-        updateTime: new Date()
+    // 如果房间已存在，检查是否是同一个房主
+    const room = existingRoom.data[0]
+    console.log('房间已存在，检查房主:', room.host?.openId, '当前用户:', openId)
+    
+    if (room.host && room.host.openId === openId) {
+      // 是同一个房主，更新房间信息
+      console.log('同一房主重新创建房间')
+      await rooms.doc(room._id).update({
+        data: {
+          host: {
+            playerId: playerId,
+            openId: openId,
+            joinTime: new Date()
+          },
+          guest: null,  // 清空访客，重新等待
+          status: 'waiting',
+          updateTime: new Date(),
+          messages: []
+        }
+      })
+    } else {
+      // 不是同一个房主，房间号冲突，生成新的房间号
+      console.log('房间号冲突，需要生成新的房间号')
+      return {
+        success: false,
+        error: '房间号已被占用，请重试'
       }
-    })
+    }
   } else {
     // 创建新房间
     console.log('创建新房间')
@@ -112,6 +126,15 @@ async function joinRoom(roomId, playerId, openId) {
   }).get()
   
   console.log('找到的房间数量:', allRooms.data.length)
+  if (allRooms.data.length > 0) {
+    console.log('房间信息:', {
+      roomId: allRooms.data[0].roomId,
+      hostOpenId: allRooms.data[0].host?.openId,
+      guestOpenId: allRooms.data[0].guest?.openId,
+      status: allRooms.data[0].status,
+      currentOpenId: openId
+    })
+  }
   
   if (allRooms.data.length === 0) {
     return {
@@ -148,9 +171,29 @@ async function joinRoom(roomId, playerId, openId) {
   
   // 检查是否是房主重新加入
   if (roomData.host && roomData.host.openId === openId) {
+    console.log('房主重新加入自己的房间')
     return {
       success: true,
       isHost: true
+    }
+  }
+  
+  // 检查是否已经有访客
+  if (roomData.guest && roomData.guest.openId === openId) {
+    console.log('访客重新加入房间')
+    return {
+      success: true,
+      isHost: false,
+      isReconnect: true
+    }
+  }
+  
+  // 检查房间是否已满
+  if (roomData.guest) {
+    console.log('房间已满')
+    return {
+      success: false,
+      error: '房间已满'
     }
   }
   

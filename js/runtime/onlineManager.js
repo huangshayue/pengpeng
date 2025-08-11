@@ -46,6 +46,14 @@ export default class OnlineManager {
             } else {
                 const errorMsg = res.result.error || '创建房间失败';
                 console.error('创建房间失败:', errorMsg);
+                
+                // 如果是房间号冲突，重新生成房间号
+                if (errorMsg.includes('房间号已被占用')) {
+                    console.log('房间号冲突，重新生成...');
+                    this.roomId = Math.floor(100000 + Math.random() * 900000).toString();
+                    return await this.createRoom(); // 递归重试
+                }
+                
                 throw new Error(errorMsg);
             }
         } catch (error) {
