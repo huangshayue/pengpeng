@@ -160,6 +160,17 @@ export default class OneHitBattleScene {
             mode: 'join'
         };
         
+        // 清理房间按钮（调试用，位置在右下角）
+        this.cleanRoomButton = {
+            x: this.width - 120,
+            y: this.height - 60,
+            width: 100,
+            height: 40,
+            text: '清理房间',
+            scale: 1,
+            mode: 'clean'
+        };
+        
         // 检查是否从分享链接进入
         const roomId = OnlineManager.getRoomIdFromQuery();
         if (roomId) {
@@ -393,6 +404,14 @@ export default class OneHitBattleScene {
                 this.joinRoomButton.scale = 0.9;
                 setTimeout(() => {
                     this.showRoomInputScreen();
+                }, 100);
+                return;
+            }
+            if (this.cleanRoomButton && this.checkModeButton(x, y, this.cleanRoomButton)) {
+                this.cleanRoomButton.scale = 0.9;
+                setTimeout(async () => {
+                    await this.debugCleanMyRooms();
+                    this.cleanRoomButton.scale = 1;
                 }, 100);
                 return;
             }
@@ -993,8 +1012,59 @@ export default class OneHitBattleScene {
         }
     }
 
+    // 查看房间列表（调试用）
+    async debugListRooms() {
+        try {
+            const res = await wx.cloud.callFunction({
+                name: 'listRooms',
+                data: { action: 'list' }
+            });
+            
+            console.log('=== 当前房间列表 ===');
+            console.log('我的OpenId:', res.result.myOpenId);
+            console.log('房间数量:', res.result.count);
+            
+            res.result.rooms.forEach(room => {
+                console.log(`房间 ${room.roomId}:`, {
+                    状态: room.status,
+                    是我的房间: room.isMyRoom,
+                    房主: room.hostOpenId ? room.hostOpenId.substring(0, 10) + '...' : '无',
+                    访客: room.guestOpenId ? room.guestOpenId.substring(0, 10) + '...' : '无',
+                    创建时间: room.createTime
+                });
+            });
+            
+            return res.result;
+        } catch (error) {
+            console.error('查看房间列表失败:', error);
+        }
+    }
+    
+    // 清理我的房间（调试用）
+    async debugCleanMyRooms() {
+        try {
+            const res = await wx.cloud.callFunction({
+                name: 'listRooms',
+                data: { action: 'cleanMy' }
+            });
+            
+            console.log('清理结果:', res.result.message);
+            wx.showToast({
+                title: res.result.message,
+                icon: 'success'
+            });
+            
+            return res.result;
+        } catch (error) {
+            console.error('清理房间失败:', error);
+        }
+    }
+    
     // 开始在线游戏
     async startOnlineGame() {
+        // 先清理我的旧房间
+        await this.debugCleanMyRooms();
+        
         this.gameMode = 'online';
         this.onlineManager = new OnlineManager();
         
@@ -1034,6 +1104,10 @@ export default class OneHitBattleScene {
     // 加入在线房间
     async joinOnlineRoom(roomId) {
         console.log('开始加入房间:', roomId);
+        
+        // 先查看房间列表，了解当前房间状态
+        await this.debugListRooms();
+        
         this.gameMode = 'online';
         this.onlineManager = new OnlineManager();
         
@@ -1603,6 +1677,14 @@ export default class OneHitBattleScene {
         this.renderModeButton(this.pvpButton);
         this.renderModeButton(this.onlineButton);
         this.renderModeButton(this.joinRoomButton);
+        
+        // 渲染清理按钮（调试用）
+        if (this.cleanRoomButton) {
+            this.ctx.save();
+            this.ctx.globalAlpha = 0.6;
+            this.renderModeButton(this.cleanRoomButton);
+            this.ctx.restore();
+        }
     }
     
     renderRoomInputScreen() {
