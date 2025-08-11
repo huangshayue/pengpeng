@@ -80,17 +80,22 @@ export default class OnlineManager {
             console.log('加入房间云函数返回:', res.result);
             
             if (res.result.success) {
-                console.log('加入房间成功:', this.roomId);
+                console.log('加入房间成功:', this.roomId, '是否房主:', res.result.isHost);
+                this.isHost = res.result.isHost;
                 this.startListening();
-                this.isConnected = true;
                 
-                // 通知房主有人加入
-                this.sendMessage({
-                    type: 'playerJoined',
-                    playerId: this.playerId
-                });
+                if (!res.result.isHost) {
+                    // 只有访客才需要通知房主
+                    this.isConnected = true;
+                    
+                    // 通知房主有人加入
+                    this.sendMessage({
+                        type: 'playerJoined',
+                        playerId: this.playerId
+                    });
+                }
                 
-                return true;
+                return res.result;
             } else {
                 const errorMsg = res.result.error || '房间不存在或已满';
                 console.error('加入房间失败:', errorMsg);
@@ -109,6 +114,8 @@ export default class OnlineManager {
     // 发送动作
     sendAction(action) {
         if (!this.isConnected && !this.isHost) return;
+        
+        console.log('发送动作:', action, '玩家ID:', this.playerId);
         
         this.sendMessage({
             type: 'action',
@@ -173,6 +180,8 @@ export default class OnlineManager {
     
     // 处理消息
     handleMessage(message) {
+        console.log('收到消息:', message);
+        
         switch (message.type) {
             case 'playerJoined':
                 if (this.onOpponentJoined) {
@@ -191,13 +200,22 @@ export default class OnlineManager {
                 break;
                 
             case 'action':
+                console.log('收到动作消息:', message.action, '来自:', message.playerId);
                 if (this.onOpponentAction && message.playerId !== this.playerId) {
+                    console.log('触发对手动作回调');
                     this.onOpponentAction(message.action);
                 }
                 break;
                 
             case 'ready':
                 // 处理准备状态
+                break;
+                
+            case 'gameStart':
+                // 游戏开始通知
+                if (this.onGameStart && message.playerId !== this.playerId) {
+                    this.onGameStart();
+                }
                 break;
         }
     }

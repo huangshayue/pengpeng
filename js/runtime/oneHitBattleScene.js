@@ -205,6 +205,13 @@ export default class OneHitBattleScene {
             this.actionConfirmed = false;
         }
         
+        // 在线模式初始化
+        if (mode === 'online') {
+            this.player1Action = null;
+            this.player2Action = null;
+            this.waitingForOpponent = false;
+        }
+        
         // 创建角色精灵
         this.playerSprite = new CharacterSprite(this.width / 2, this.height - 150, true);
         this.aiSprite = new CharacterSprite(this.width / 2, 150, false);
@@ -213,8 +220,9 @@ export default class OneHitBattleScene {
         this.animationSystem.createFlash('#4CAF50', 300);
         this.particleSystem.createExplosion(this.width / 2, this.height / 2, '#4CAF50', 30);
         
+        const title = mode === 'online' ? '在线对决！' : '生死对决！';
         wx.showToast({
-            title: '生死对决！',
+            title: title,
             icon: 'none',
             duration: 1500
         });
@@ -714,12 +722,16 @@ export default class OneHitBattleScene {
             const winner = this.gameState.checkGameOver();
             if (winner > 0) {
                 this.endGame(winner);
-            } else {
-                // 切换到AI回合
+            } else if (this.gameMode === 'pve') {
+                // 只有PVE模式才切换到AI回合
                 this.currentTurn = 'ai';
                 setTimeout(() => {
                     this.aiTurn();
                 }, 500);
+            } else if (this.gameMode === 'online') {
+                // 在线模式等待对手动作
+                this.isProcessing = false;
+                this.currentTurn = 'waiting';
             }
         } else {
             this.isProcessing = false;
@@ -989,6 +1001,13 @@ export default class OneHitBattleScene {
         // 设置回调
         this.onlineManager.onOpponentJoined = () => {
             this.isWaitingForOpponent = false;
+            // 房主不立即开始游戏，等待对方发送gameStart消息
+            console.log('对手加入房间');
+        };
+        
+        this.onlineManager.onGameStart = () => {
+            console.log('收到游戏开始信号');
+            this.isWaitingForOpponent = false;
             this.startGame('online');
         };
         
@@ -1033,16 +1052,35 @@ export default class OneHitBattleScene {
         
         try {
             // 加入房间
-            const success = await this.onlineManager.joinRoom(roomId);
-            if (success) {
-                console.log('成功加入房间:', roomId);
+            const result = await this.onlineManager.joinRoom(roomId);
+            if (result) {
+                console.log('成功加入房间:', roomId, '是否房主:', result.isHost);
                 this.roomId = roomId;
-                wx.showToast({
-                    title: '加入成功！',
-                    icon: 'success',
-                    duration: 1500
-                });
-                this.startGame('online');
+                
+                if (result.isHost) {
+                    // 是房主重新加入自己的房间
+                    wx.showToast({
+                        title: '这是你的房间',
+                        icon: 'none',
+                        duration: 2000
+                    });
+                    this.isWaitingForOpponent = true;
+                    this.showWaitingScreen();
+                } else {
+                    // 真正加入别人的房间
+                    wx.showToast({
+                        title: '加入成功！',
+                        icon: 'success',
+                        duration: 1500
+                    });
+                    this.startGame('online');
+                    
+                    // 通知房主游戏开始
+                    this.onlineManager.sendMessage({
+                        type: 'gameStart',
+                        playerId: this.onlineManager.playerId
+                    });
+                }
             } else {
                 console.log('加入房间失败:', roomId);
                 // 这个else分支实际上不会执行，因为onlineManager会抛出异常
